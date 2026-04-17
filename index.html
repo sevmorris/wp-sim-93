@@ -1,0 +1,2505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FL2601</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+  <style>
+    /* ── Reset ──────────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Phosphor green palette ─────────────────────────────────────────────── */
+    :root {
+      --amber:    #33ff33;   /* normal output       */
+      --amber-hi: #99ff99;   /* bright / prompts    */
+      --amber-lo: #1a6b1a;   /* dim / system msgs   */
+      --amber-bg: #000000;
+      --amber-border: #228822;
+    }
+
+    html, body {
+      background: var(--amber-bg);
+      color: var(--amber);
+      font-family: 'VT323', 'Courier New', Courier, monospace;
+      font-size: 24px;
+      line-height: 1.45;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* ── Outer layout ───────────────────────────────────────────────────────── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100%;
+    }
+
+    /* ── Status panel ───────────────────────────────────────────────────────── */
+    #panel {
+      flex-shrink: 0;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--amber-border);
+      white-space: pre;
+      overflow: hidden;
+      color: var(--amber-hi);
+      line-height: 1.5;
+      user-select: none;
+    }
+    #panel .dim  { color: var(--amber-lo); }
+    #panel .norm { color: var(--amber); }
+
+    /* ── Scrollable output ──────────────────────────────────────────────────── */
+    #output {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 12px 4px;
+      scroll-behavior: smooth;
+    }
+
+    .line {
+      display: block;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 1.5em;
+    }
+    .line.dim   { color: var(--amber-lo); }
+    .line.hi    { color: var(--amber-hi); }
+    .line.err   { color: #cc4400; }
+    .line.white { color: #ffffff; }
+
+    /* ── Input row ──────────────────────────────────────────────────────────── */
+    #input-row {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 4px 12px 8px;
+      border-top: 1px solid var(--amber-lo);
+    }
+
+    #prompt {
+      color: var(--amber-hi);
+      white-space: pre;
+      user-select: none;
+    }
+
+    #cmd-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--amber);
+      font-family: inherit;
+      font-size: inherit;
+      caret-color: var(--amber-hi);
+      padding: 0 0 0 2px;
+    }
+
+    /* hide the password field visually but keep it readable by screenreaders */
+    #cmd-input[data-mode="password"] {
+      -webkit-text-security: disc;
+      text-security: disc;
+    }
+
+    /* ── Blinking cursor (for boot / read-only phases) ─────────────────────── */
+    @keyframes blink {
+      0%, 49%  { opacity: 1; }
+      50%, 100%{ opacity: 0; }
+    }
+    .cursor::after {
+      content: '█';
+      animation: blink 1s step-end infinite;
+      color: var(--amber-hi);
+    }
+
+    /* ── Scrollbar ──────────────────────────────────────────────────────────── */
+    #output::-webkit-scrollbar { width: 6px; }
+    #output::-webkit-scrollbar-track { background: #111; }
+    #output::-webkit-scrollbar-thumb { background: var(--amber-lo); border-radius: 3px; }
+
+    /* ── Mobile notice ──────────────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      html, body { font-size: 15px; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="panel"></div>
+  <div id="output"></div>
+  <div id="input-row">
+    <span id="prompt"></span>
+    <input id="cmd-input" type="text" autocomplete="off" autocorrect="off"
+           autocapitalize="off" spellcheck="false" aria-label="terminal input">
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CONFIGURATION
+   ════════════════════════════════════════════════════════════════════════════
+
+   FLOPPY PASSWORD
+   ───────────────
+   To protect the in-game floppy letter with a password, paste a SHA-256 hash
+   into FLOPPY_PASS_HASH.  Generate one in any browser console:
+
+     async function h(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+     h('your-password-here').then(console.log)
+
+   Set to 'DISABLED' to require no password.
+*/
+const CONFIG = {
+  LOGIN_USER: 'joe',
+
+  /* Floppy disk password — protects the in-game letter.txt
+     Set to 'DISABLED' to require no password. */
+  FLOPPY_PASS_HASH: 'a3138f5d5cd7d942b89e39613726f39f1c1706045a31e037c1370784dabebe7d',   // ← replace with your SHA-256 hash
+
+  /* System flavour */
+  HOSTNAME:  'owl.temple.edu',
+  BOOT_DATE: 'Tue Oct  5 09:13:01 EDT 1993',
+  HOME:      '/home/joe',
+};
+
+/* ════════════════════════════════════════════════════════════════════════════
+   VIRTUAL FILESYSTEM
+   ════════════════════════════════════════════════════════════════════════════
+
+   Add or edit files here.  Set `protected: true` on any file that should only
+   be readable after login.
+
+   File fields:
+     type     : 'file' | 'dir'
+     perms    : ls -l permission string
+     owner    : owner name
+     group    : group name
+     size     : byte count shown in ls -l
+     mtime    : modification time string shown in ls -l
+     hidden   : true = only shown in ls -a / ls -la
+     protected: true = cannot be read unless logged in
+     content  : file text (for type:'file')
+*/
+const FS = {
+
+  /* ── System directories ───────────────────────────────────────────────── */
+  '/': {
+    type:'dir', perms:'drwxr-xr-x', owner:'root', group:'wheel',
+    size:160, mtime:'Sep 28 12:00'
+  },
+  '/home': {
+    type:'dir', perms:'drwxr-xr-x', owner:'root', group:'wheel',
+    size:60, mtime:'Sep 28 12:00'
+  },
+  '/mnt': {
+    type:'dir', perms:'drwxr-xr-x', owner:'root', group:'wheel',
+    size:60, mtime:'Oct  5 09:12'
+  },
+  '/tmp': {
+    type:'dir', perms:'drwxrwxrwt', owner:'root', group:'wheel',
+    size:40, mtime:'Oct  5 09:14'
+  },
+
+  /* ── Home directory ───────────────────────────────────────────────────── */
+  '/home/joe': {
+    type:'dir', perms:'drwxr-xr-x', owner:'joe', group:'staff',
+    size:512, mtime:'Oct  5 09:14'
+  },
+
+  '/home/joe/.cshrc': {
+    type:'file', perms:'-rw-r--r--', owner:'joe', group:'staff',
+    size:291, mtime:'Oct  3 22:17', hidden:true,
+    content:
+`# .cshrc -- joe@owl
+set path = (/usr/ucb /usr/bin /bin /usr/local/bin /usr/openwin/bin .)
+set prompt = "joe@owl% "
+set history = 100
+set savehist = 50
+set ignoreeof
+setenv TERM xterm
+setenv EDITOR vi
+setenv PAGER more
+setenv DISPLAY :0.0
+alias h      history
+alias j      jobs
+alias ll     'ls -la'
+alias rm     'rm -i'
+alias mail   elm
+alias bye    logout`
+  },
+
+  '/home/joe/.plan': {
+    type:'file', perms:'-rw-r--r--', owner:'joe', group:'staff',
+    size:89, mtime:'Oct  4 18:30', hidden:true,
+    content:
+`Finishing CIS 4707 (Compiler Design).  Thinking about grad school apps.
+Looking for a roommate -- near campus, $350/mo, avail Nov 1.
+Ask me about PowerPC vs x86.  I have opinions.`
+  },
+
+  '/home/joe/notes.txt': {
+    type:'file', perms:'-rw-r--r--', owner:'joe', group:'staff',
+    size:498, mtime:'Sep 30 14:22',
+    content:
+`terminal setup notes
+Oct 1993
+
+buckingham is installed in /usr/local/bin -- just type  buckingham  to run it.
+/mnt/floppy has some old scripts and a backup copy.
+
+elm works for mail.  pine might be better.  Still deciding.
+Mosaic 2.0 is on /usr/local/bin -- DNS is slow, be patient.`
+  },
+
+  '/home/joe/todo': {
+    type:'file', perms:'-rw-r--r--', owner:'joe', group:'staff',
+    size:247, mtime:'Oct  5 08:55',
+    content:
+`[ ] CIS 4707 compiler project -- due friday (shift-reduce conflicts)
+[ ] return books to Paley Library (Tanenbaum, Stevens APUE)
+[ ] ask about thesis extension
+[ ] figure out why Mosaic dumps core on .gif images
+[x] install buckingham to /usr/local/bin`
+  },
+
+  /* ── Letters directory ────────────────────────────────────────────────── */
+  '/home/joe/letters': {
+    type:'dir', perms:'drwx------', owner:'joe', group:'staff',
+    size:128, mtime:'Oct  5 09:00'
+  },
+
+  /* ── Letter files — protected: true means login required ─────────────── */
+  '/home/joe/letters/letter_001.txt': {
+    type:'file', perms:'-rw-------', owner:'joe', group:'staff',
+    size:512, mtime:'Oct  1 14:22', protected:true,
+    content:
+`October 1, 1993
+
+[Your first letter goes here.
+
+Replace this placeholder text with whatever you'd like to share.
+Save the file, reload, and the letter will appear to anyone
+who logs in.]`
+  },
+
+  '/home/joe/letters/letter_002.txt': {
+    type:'file', perms:'-rw-------', owner:'joe', group:'staff',
+    size:512, mtime:'Oct  3 20:11', protected:true,
+    content:
+`October 3, 1993
+
+[Second letter placeholder.  Add as many letter files as you like.
+Copy one of the existing entries in the FS object above and
+give it a new path, mtime, and content.]`
+  },
+
+  /* ── Local binaries ──────────────────────────────────────────────────── */
+  '/usr/local': {
+    type:'dir', perms:'drwxr-xr-x', owner:'root', group:'wheel',
+    size:64, mtime:'Oct  5 09:00'
+  },
+  '/usr/local/bin': {
+    type:'dir', perms:'drwxr-xr-x', owner:'root', group:'wheel',
+    size:128, mtime:'Oct  5 09:00'
+  },
+  '/usr/local/bin/buckingham': {
+    type:'file', perms:'-rwxr-xr-x', owner:'root', group:'wheel',
+    size:1024, mtime:'Oct  5 09:00',
+    content:
+`#!/bin/csh -f
+# buckingham -- a text adventure`
+  },
+
+  /* ── Floppy disk ──────────────────────────────────────────────────────── */
+  '/mnt/floppy': {
+    type:'dir', perms:'drwxr-xr-x', owner:'root', group:'wheel',
+    size:64, mtime:'Oct  5 09:12'
+  },
+
+  '/mnt/floppy/README.txt': {
+    type:'file', perms:'-rw-r--r--', owner:'root', group:'wheel',
+    size:312, mtime:'Oct  5 09:12',
+    content:
+`BUCKINGHAM  --  A Text Adventure
+------------------------------
+
+A small game. A room. Some things left behind.
+
+To play:
+  buckingham
+
+Commands inside the game:
+  look            describe the room
+  take <item>     pick something up
+  drop <item>     put it back down
+  read <item>     read it
+  examine <item>  look more closely
+  inventory       list what you're carrying
+  quit            return to the shell`
+  },
+
+  '/mnt/floppy/buckingham': {
+    type:'file', perms:'-rwxr-xr-x', owner:'root', group:'wheel',
+    size:512, mtime:'Oct  5 09:12',
+    content:
+`#!/bin/csh -f
+# buckingham -- backup copy
+# see /usr/local/bin/buckingham for the installed version
+exec /usr/local/bin/buckingham`
+  },
+
+};
+
+/* ════════════════════════════════════════════════════════════════════════════
+   MOTD — shown after successful login
+   ════════════════════════════════════════════════════════════════════════════ */
+const MOTD = `
+Welcome to Buckingham Place.
+
+Philadelphia, October 1993.  It's raining — one of those late summer showers that keeps you inside.
+
+You've just woken up in your West Philly apartment.
+Nothing on the agenda.  Nowhere you need to be.
+
+Type  buckingham  to play.
+`;
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ADVENTURE GAME WORLD
+   ════════════════════════════════════════════════════════════════════════════
+
+   ROOM_DESC   : what the player sees when they type  look
+   ITEMS       : objects in the room — these are your letters.
+
+   Each item needs:
+     id        : the word used in commands ("letter", "envelope", etc.)
+     label     : shown in room descriptions and inventory
+     roomDesc  : one-line note shown when the player looks around
+     examDesc  : shown when they  examine  the item
+     content   : the full text shown when they  read  it
+*/
+const ROOM_DESC =
+`A small living room. A metal desk sits against the west wall — a PC on it,
+monitor glowing blue-gray, an old lamp from Second Mile Thrift Store beside it.
+In the northwest corner, a small table holds a phone and an answering machine.
+Records and a turntable line the south wall. An old sofa sits in the middle of the
+room, facing the television — a cat curled up on one end.
+Books, cassettes, and a boombox crowd the shelves along the north wall.
+The kitchen is open to the east. Rain against the window.`;
+
+const ITEMS = [
+
+  // ── Desk items (onDesk: true — visible only when you examine the desk) ───
+  {
+    id:       'tmz flyer',
+    label:    'a flyer from the printer',
+    onDesk:   true,
+    examDesc: 'A fresh printout, still slightly warm. Touch Me Zoo at the Khyber Pass.',
+    content:
+`TOUCH ME ZOO
+The Khyber Pass  --  56 S. 2nd St., Philadelphia
+Friday, October 8, 1993  --  Doors at 8pm
+$3`,
+  },
+  {
+    id:       'flyer',
+    label:    'a concert flyer',
+    onDesk:   true,
+    examDesc: 'A photocopied flyer, slightly creased.',
+    content:
+`GUIDED BY VOICES
+JC Dobbs  --  South Street, Philadelphia
+Saturday, October 9, 1993  --  Doors at 9
+$4 cover`
+  },
+  {
+    id:       'pens',
+    label:    'some pens',
+    onDesk:   true,
+    examDesc: 'A handful of ballpoint pens, a few without caps.',
+    content:  null,
+  },
+  {
+    id:       'pen',
+    label:    'a ballpoint pen',
+    hidden:   true,
+    examDesc: 'A plain ballpoint pen.',
+    content:  null,
+  },
+
+  // ── Desk drawer items (inDrawer: true — visible only when drawer is open) ──
+  {
+    id:       'floppy',
+    label:    'a 3.5" floppy disk',
+    inDrawer: true,
+    examDesc() {
+      if (floppyInserted) return 'A 3.5" floppy disk. It\'s currently in the drive.';
+      if (floppyRead)     return 'A 3.5" floppy disk. "Floppy Letter 2601". You\'ve read it.';
+      return 'A 3.5" floppy disk. Handwritten label in blue marker: "Floppy Letter 2601".';
+    },
+    content:
+`Dear Joe,
+
+Welcome to Floppy Letter 2601, the first for 2026! I hope you enjoy this one. I've enjoyed writing it.
+
+I'm not sure what else to say at the moment. This is simply a placeholder for now.
+
+Later!
+Seven`
+  },
+
+  // ── Kitchen items (inCabinet: true — visible only when cabinet is open) ───
+  {
+    id:        'mug',
+    label:     'a ceramic mug',
+    inCabinet: true,
+    roomDesc:  'A ceramic mug is here.',
+    examDesc() { return mugFilled ? 'A ceramic mug. Still a little warm.' : 'A plain ceramic mug. Empty.'; },
+    content:   null,
+  },
+
+  // ── Records (shelved: true — visible only when you examine the record shelf) ─
+  { id:'abbey road',       label:'Abbey Road',                              artist:'The Beatles',              shelved:true, examDesc:'The Beatles. Apple Records, 1969.' },
+  { id:'revolver',         label:'Revolver',                                artist:'The Beatles',              shelved:true, examDesc:'The Beatles. Parlophone, 1966.' },
+  { id:'rubber soul',      label:'Rubber Soul',                             artist:'The Beatles',              shelved:true, examDesc:'The Beatles. Parlophone, 1965.' },
+  { id:'white album',      label:'The White Album',                         artist:'The Beatles',              shelved:true, examDesc:'The Beatles. Apple Records, 1968. Double LP.' },
+  { id:'sweetheart',       label:'Our Beloved Revolutionary Sweetheart',    artist:'Camper Van Beethoven',     shelved:true, examDesc:'Camper Van Beethoven. Virgin Records, 1988.' },
+  { id:'let it be',        label:'Let It Be',                               artist:'The Replacements',         shelved:true, examDesc:'The Replacements. Twin/Tone Records, 1984.' },
+  { id:'bollocks',         label:'Never Mind the Bollocks',                 artist:'Sex Pistols',              shelved:true, examDesc:'Sex Pistols. Virgin Records, 1977.' },
+  { id:'the clash lp',     label:'The Clash',                               artist:'The Clash',                shelved:true, examDesc:'The Clash. CBS Records, 1977. UK pressing.' },
+  { id:'london calling',   label:'London Calling',                          artist:'The Clash',                shelved:true, examDesc:'The Clash. Epic Records, 1979. Double LP.' },
+  { id:'ramones',          label:'Ramones',                                 artist:'Ramones',                  shelved:true, examDesc:'Ramones. Sire Records, 1976. 29 minutes. Perfect.' },
+  { id:'marquee moon',     label:'Marquee Moon',                            artist:'Television',               shelved:true, examDesc:'Television. Elektra Records, 1977.' },
+  { id:'horses',           label:'Horses',                                  artist:'Patti Smith',              shelved:true, examDesc:'Patti Smith. Arista Records, 1975.' },
+  { id:'daydream nation',  label:'Daydream Nation',                         artist:'Sonic Youth',              shelved:true, examDesc:'Sonic Youth. Enigma Records, 1988. Double LP.' },
+  { id:'doolittle',        label:'Doolittle',                               artist:'Pixies',                   shelved:true, examDesc:'Pixies. 4AD, 1989.' },
+  { id:'dark side',        label:'The Dark Side of the Moon',               artist:'Pink Floyd',               shelved:true, examDesc:'Pink Floyd. Harvest Records, 1973.' },
+  { id:'close to the edge',label:'Close to the Edge',                       artist:'Yes',                      shelved:true, examDesc:'Yes. Atlantic Records, 1972.' },
+  { id:'crimson king',     label:'In the Court of the Crimson King',        artist:'King Crimson',             shelved:true, examDesc:'King Crimson. Island Records, 1969.' },
+  { id:'thick as a brick', label:'Thick as a Brick',                        artist:'Jethro Tull',              shelved:true, examDesc:'Jethro Tull. Chrysalis Records, 1972. The whole LP is one song.' },
+  { id:'queen is dead',    label:'The Queen Is Dead',                       artist:'The Smiths',               shelved:true, examDesc:'The Smiths. Rough Trade Records, 1986.' },
+  { id:'psychocandy',      label:'Psychocandy',                             artist:'The Jesus and Mary Chain', shelved:true, examDesc:'The Jesus and Mary Chain. Blanco y Negro, 1985.' },
+  { id:'damaged',          label:'Damaged',                                 artist:'Black Flag',               shelved:true, examDesc:'Black Flag. SST Records, 1981.' },
+  { id:'fresh fruit',      label:'Fresh Fruit for Rotting Vegetables',      artist:'Dead Kennedys',            shelved:true, examDesc:'Dead Kennedys. Alternative Tentacles, 1980.' },
+
+  // ── Cassettes (shelvedTape: true — visible only when you examine the cassette shelf) ─
+  { id:'unknown pleasures',  label:'Unknown Pleasures',  artist:'Joy Division',          shelvedTape:true, examDesc:'Joy Division. Factory Records, 1979. Well-worn tape.' },
+  { id:'disintegration',     label:'Disintegration',     artist:'The Cure',              shelvedTape:true, examDesc:'The Cure. Elektra, 1989. The shell is cracked at one corner.' },
+  { id:'fear of music',      label:'Fear of Music',      artist:'Talking Heads',         shelvedTape:true, examDesc:'Talking Heads. Sire Records, 1979.' },
+  { id:'entertainment',      label:'Entertainment!',     artist:'Gang of Four',          shelvedTape:true, examDesc:'Gang of Four. EMI, 1979. The label is half peeled.' },
+  { id:'pink flag',          label:'Pink Flag',          artist:'Wire',                  shelvedTape:true, examDesc:'Wire. Harvest Records, 1977. 21 songs in 35 minutes.' },
+  { id:'some great reward',  label:'Some Great Reward',  artist:'Depeche Mode',          shelvedTape:true, examDesc:'Depeche Mode. Mute Records, 1984.' },
+  { id:'ocean rain',         label:'Ocean Rain',         artist:'Echo & the Bunnymen',   shelvedTape:true, examDesc:'Echo & the Bunnymen. Korova Records, 1984.' },
+  { id:'in the flat field',  label:'In the Flat Field',  artist:'Bauhaus',               shelvedTape:true, examDesc:'Bauhaus. 4AD, 1980. Case cracked at the corner.' },
+  { id:'tim',                label:'Tim',                artist:'The Replacements',      shelvedTape:true, examDesc:"The Replacements. Sire Records, 1985. Dubbed from the record." },
+  { id:'zen arcade',         label:'Zen Arcade',         artist:'Hüsker Dü',             shelvedTape:true, examDesc:'Hüsker Dü. SST Records, 1984. Double cassette.' },
+  { id:'parallel lines',     label:'Parallel Lines',     artist:'Blondie',               shelvedTape:true, examDesc:'Blondie. Chrysalis Records, 1978.' },
+  { id:'this years model',   label:"This Year's Model",  artist:'Elvis Costello',        shelvedTape:true, examDesc:"Elvis Costello. Radar Records, 1978." },
+  { id:'wonderwear music',   label:'Wonderwear Music',   artist:'Touch Me Zoo',          shelvedTape:true, examDesc:'Touch Me Zoo. Local. The case has a hand-drawn insert.' },
+
+  // ── Books (shelvedBook: true — visible only when you examine the bookshelf) ─
+  // Fiction
+  { id:'lot 49',            label:'The Crying of Lot 49',                   shelvedBook:true, examDesc:"Pynchon. A slim paperback, spine cracked. The page corners are folded over." },
+  { id:'slaughterhouse',    label:'Slaughterhouse-Five',                    shelvedBook:true, examDesc:"Vonnegut. A Dell paperback. 'So it goes' is underlined on three different pages." },
+  { id:'confederacy',       label:'A Confederacy of Dunces',                shelvedBook:true, examDesc:"John Kennedy Toole. Ignatius J. Reilly lumbers through New Orleans. A Philadelphia used bookstore sticker on the back." },
+  { id:'ask the dust',      label:'Ask the Dust',                           shelvedBook:true, examDesc:"John Fante. A battered Bandini paperback. Someone wrote 'yes' in the margin on page 64." },
+  { id:'naked lunch',       label:'Naked Lunch',                            shelvedBook:true, examDesc:"Burroughs. Grove Press. The pages are slightly swollen, like it got wet once." },
+  { id:'white noise',       label:'White Noise',                            shelvedBook:true, examDesc:"Don DeLillo. Viking, 1985. A bookmark from the Wooden Shoe Bookstore still inside." },
+  { id:'less than zero',    label:'Less Than Zero',                         shelvedBook:true, examDesc:"Bret Easton Ellis. Simon & Schuster, 1985. A quick read. You've been through it twice." },
+  { id:'blood meridian',    label:'Blood Meridian',                         shelvedBook:true, examDesc:"Cormac McCarthy. Random House, 1985. Brutal and beautiful. Not easy to pick back up." },
+  { id:'moviegoer',         label:'The Moviegoer',                          shelvedBook:true, examDesc:"Walker Percy. A National Book Award sticker on the cover. Set in New Orleans." },
+  // Film textbooks
+  { id:'screen trade',      label:'Adventures in the Screen Trade',         shelvedBook:true, examDesc:"William Goldman. Warner Books, 1983. 'Nobody knows anything.' Underlined twice." },
+  { id:'syd field',         label:'Screenplay',                             shelvedBook:true, examDesc:"Syd Field. Dell, 1979. Act One, Act Two, Act Three. The classic." },
+  { id:'film art',          label:'Film Art: An Introduction',              shelvedBook:true, examDesc:"Bordwell and Thompson. Addison-Wesley, 1985. Third edition. Heavily annotated." },
+  { id:'five cs',           label:"The Five C's of Cinematography",         shelvedBook:true, examDesc:"Joseph V. Mascelli. Silman-James, 1965. Camera angles, continuity, cutting, close-ups, composition." },
+  { id:'bresson',           label:'Notes on Cinematography',                shelvedBook:true, examDesc:"Robert Bresson. Translated by Jonathan Griffin. Urizen Books, 1975. More aphorism than instruction." },
+  { id:'grammar of film',   label:'The Grammar of the Film Language',       shelvedBook:true, examDesc:"Daniel Arijon. Focal Press, 1976. 624 pages of diagrams. You use it like a dictionary." },
+  { id:'film editing',      label:'The Technique of Film Editing',          shelvedBook:true, examDesc:"Reisz and Millar. Focal Press, 1968. Second edition. Half the examples are Kurosawa." },
+
+  // ── Beer (inFridge: true — only accessible when fridge is open) ──────────
+  { id:'yuengling',     label:'a Yuengling Lager',    inFridge:true, drinkable:true, examDesc:'Yuengling Traditional Lager. Pottsville, PA. Oldest brewery in America. Cold.' },
+  { id:'dock street',   label:'a Dock Street Amber',  inFridge:true, drinkable:true, examDesc:"Dock Street Brewing Co. Local. Up on 18th Street. A good amber, a little malty." },
+  { id:'rolling rock',  label:'a Rolling Rock',       inFridge:true, drinkable:true, examDesc:'Rolling Rock Extra Pale. Latrobe, PA. The green bottle with the mystery 33.' },
+
+  // ── Scrapple ─────────────────────────────────────────────────────────────
+  {
+    id:      'scrapple',
+    label:   'a package of Habbersett scrapple',
+    inFridge: true,
+    examDesc() {
+      if (scrappleCooked) return 'Scrapple cooked golden-brown in the pan. Crispy at the edges, still steaming. Eat it before it gets cold.';
+      if (scrappleInPan)  return "Scrapple sliced into the pan, ready to go. Turn on the stove.";
+      return "Habbersett scrapple. A dense gray-brown block wrapped in waxed paper. Smells faintly of sage, cornmeal, and pork. Philadelphia staple.";
+    },
+  },
+
+  // ── Kitchen drawer ────────────────────────────────────────────────────────
+  {
+    id:              'knife',
+    label:           'a paring knife',
+    inKitchenDrawer: true,
+    examDesc:        'A short paring knife. Wooden handle, slightly worn. Sharp enough.',
+  },
+];
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SCENERY — non-takeable interactive objects
+   ════════════════════════════════════════════════════════════════════════════
+   names    : words the player can use to refer to this object
+   desc     : string or function returning string
+   toggle   : true if  turn on / turn off  applies
+*/
+const SCENERY = {
+  desk: {
+    names: ['desk', 'metal desk'],
+    desc() {
+      const onDesk = ITEMS.filter(it => it.onDesk && !gInventory.includes(it.id));
+      const listed = onDesk.map(it => it.label).join(', ');
+      const surface = listed
+        ? `A metal desk against the west wall. On it: a PC, a dot-matrix printer, and ${listed}.`
+        : 'A metal desk against the west wall. A PC and a dot-matrix printer sit on it.';
+      return `${surface} A shallow drawer below the surface.`;
+    },
+  },
+  computer: {
+    names: ['computer', 'pc', 'windows', 'monitor', 'screen', 'keyboard', 'dos'],
+    desc() {
+      const driveStatus = floppyInserted
+        ? 'The floppy drive light is on. A disk is loaded.'
+        : 'The 3.5" drive slot is empty.';
+      return `A 486 PC clone on the desk. Windows 3.1. The monitor glows blue-gray — Program Manager sitting open behind a minimized DOS prompt. ${driveStatus}`;
+    },
+  },
+  printer: {
+    names: ['printer', 'dot matrix', 'dot-matrix', 'print', 'output tray', 'tray'],
+    desc() {
+      const flyer = ITEMS.find(i => i.id === 'tmz flyer');
+      const flyerGone = !flyer || gInventory.includes('tmz flyer') || flyer.dropped;
+      return flyerGone
+        ? 'A dot-matrix printer on the desk beside the monitor. Paper loaded, ready to go.'
+        : 'A dot-matrix printer on the desk beside the monitor. A flyer is sitting in the output tray.';
+    },
+  },
+  drawer: {
+    names: ['drawer', 'desk drawer'],
+    desc() {
+      if (!drawerOpen) return 'A shallow metal drawer below the desk surface. Closed.';
+      const floppy = ITEMS.find(it => it.id === 'floppy');
+      const floppyGone = gInventory.includes('floppy') || floppyInserted;
+      return floppyGone
+        ? 'The drawer is open. Empty now.'
+        : 'The drawer is open. There\'s a 3.5" floppy disk inside, labeled "Floppy Letter 2601".';
+    },
+  },
+  lamp: {
+    names: ['lamp', 'old lamp'],
+    desc() { return `An old lamp from Second Mile Thrift Store. It is ${lampOn ? 'on' : 'off'}.`; },
+    toggle: true,
+    turnOn()  { lampOn = true;  addLine('You click the lamp on. The room fills with warm light.'); },
+    turnOff() { lampOn = false; addLine('You click the lamp off. The room goes dark.'); },
+  },
+  tv: {
+    names: ['tv', 'television', 'set'],
+    desc() {
+      return tvOn
+        ? "A boxy television. Channel 17 -- Hogan's Heroes. The laugh track echoes off the walls."
+        : 'A boxy television. The screen is dark.';
+    },
+    toggle: true,
+    turnOn()  { tvOn = true;  addLine("You click the TV on. Channel 17. Hogan's Heroes."); },
+    turnOff() { tvOn = false; addLine('You click the TV off. Silence.'); },
+  },
+  shelf: {
+    names: ['shelf', 'shelves', 'record', 'records', 'record shelf', 'vinyl'],
+    desc() {
+      const available = ITEMS.filter(it => it.shelved && !gInventory.includes(it.id) && !it.dropped);
+      const titles = available.map(it => it.label).join(', ');
+      return `Shelves along the south wall packed with records. You can make out: ${titles}. And many more behind them.`;
+    },
+  },
+  turntable: {
+    names: ['turntable', 'record player', 'player', 'needle', 'platter'],
+    desc() {
+      return recordPlaying
+        ? `A turntable on a low shelf. ${recordPlaying} is on the platter, spinning.`
+        : 'A turntable on a low shelf beside the record collection. The needle is up.';
+    },
+  },
+  sofa: {
+    names: ['sofa', 'couch', 'old sofa', 'old couch'],
+    desc() {
+      if (seated) return tvOn
+        ? "You're sitting on it right now, watching Hogan's Heroes. Cracker is curled up against your leg."
+        : "You're sitting on it right now. The TV is dark. Cracker is curled up against your leg.";
+      return 'A beat-up sofa with a quilt thrown over the back, facing the television. Cracker is curled up on one end.';
+    },
+  },
+  cat: {
+    names: ['cat', 'cracker', 'kitten', 'kitty'],
+    desc() {
+      if (seated) return 'Cracker — beige, medium-length hair, deeply asleep. She\'s pressed against your leg, slow-breathing. One paw is tucked under her chin.';
+      return 'Cracker is curled up on the sofa, fast asleep. Beige, medium-length hair. She doesn\'t stir.';
+    },
+  },
+  cabinet: {
+    names: ['cabinet', 'cabinet above', 'kitchen cabinet', 'cupboard'],
+    desc() {
+      if (!cabinetOpen) return 'A cabinet mounted above the counter, next to the coffee maker. It\'s closed.';
+      const mug = ITEMS.find(it => it.id === 'mug');
+      const mugGone = gInventory.includes('mug');
+      return mugGone
+        ? 'The cabinet is open. It\'s empty now.'
+        : 'The cabinet is open. There\'s a ceramic mug on the shelf inside.';
+    },
+    openable: true,
+  },
+  coffeepot: {
+    names: ['coffee', 'coffee pot', 'coffeepot', 'coffee maker', 'coffeemaker', 'pot', 'carafe', 'counter', 'countertop'],
+    desc() {
+      return 'A drip coffee maker on the counter. The carafe is about half full — not fresh, but not terrible either.';
+    },
+  },
+  fridge: {
+    names: ['fridge', 'refrigerator', 'icebox', 'ice box', 'leftovers', 'foil'],
+    desc() {
+      if (!fridgeOpen) return 'A humming refrigerator against the kitchen wall. Takeout menus held up by magnets — Jade Palace, a few others.';
+      const items = ITEMS.filter(it => it.inFridge && !gInventory.includes(it.id));
+      const listed = items.map(it => it.label).join(', ');
+      return listed
+        ? `The fridge is open. Cold air spills out. Inside: ${listed}. Also some foil-wrapped leftovers.`
+        : "The fridge is open. Just the leftovers now.";
+    },
+    openable: true,
+  },
+  jadePalace: {
+    names: ['jade palace', 'jade palace menu', 'chinese menu', 'takeout menu', 'menus', 'menu', 'fridge magnets', 'magnets', 'magnet', 'pineapple magnet', 'lo mein'],
+    desc: 'Jade Palace Chinese Restaurant. A folded paper menu held up by a magnet shaped like a pineapple. The lo mein is circled in pen.',
+  },
+  stove: {
+    names: ['stove', 'range', 'burner', 'burners', 'oven', 'stovetop', 'gas stove', 'gas range'],
+    desc() {
+      if (stoveOn && scrappleInPan && !scrappleCooked)
+        return 'A gas range in the southeast corner. One burner lit — the pan is going, scrapple sizzling. The smell is incredible.';
+      if (stoveOn && scrappleCooked)
+        return 'A gas range in the southeast corner. Burner still on. The scrapple in the pan is done — golden-brown, crispy at the edges.';
+      if (stoveOn)
+        return 'A gas range in the southeast corner. One burner on with a low blue flame.';
+      if (scrappleCooked)
+        return 'A gas range in the southeast corner. Burner off. Cooked scrapple in the pan — eat it while it\'s hot.';
+      if (scrappleInPan)
+        return 'A gas range in the southeast corner. Scrapple slices sit in the pan on the front burner. The stove is off.';
+      return 'A gas range in the southeast corner. Four burners. A cast-iron pan sits on the front burner.';
+    },
+    toggle: true,
+    turnOn() {
+      if (stoveOn) { addLine('The stove is already on.'); return; }
+      stoveOn = true;
+      if (scrappleInPan && !scrappleCooked) {
+        addLine('You turn the knob. The burner ignites with a click and a soft whump.');
+        addLine('The scrapple starts to sizzle immediately. Sage and cornmeal and pork fat fill the kitchen.');
+      } else {
+        addLine('You turn the knob. The burner ignites — a low blue flame.');
+      }
+    },
+    turnOff() {
+      if (!stoveOn) { addLine('The stove is already off.'); return; }
+      stoveOn = false;
+      addLine('You turn the knob. The flame goes out with a click.');
+    },
+  },
+  pan: {
+    names: ['pan', 'cast iron', 'cast-iron', 'skillet', 'frying pan', 'iron pan', 'cast iron pan'],
+    desc() {
+      if (scrappleCooked)
+        return 'A cast-iron pan on the front burner. The scrapple is done — golden and crispy. Eat it.';
+      if (scrappleInPan && stoveOn)
+        return 'A cast-iron pan on the front burner, sizzling. The scrapple is cooking.';
+      if (scrappleInPan)
+        return 'A cast-iron pan on the front burner. Scrapple slices in it, stove is off.';
+      return 'A well-seasoned cast-iron pan, black from years of use. Sits on the front burner of the stove.';
+    },
+  },
+  kitchenDrawer: {
+    names: ['kitchen drawer', 'drawer by the fridge', 'knife drawer', 'silverware drawer', 'utensil drawer', 'matches', 'rubber bands', 'rubber band'],
+    desc() {
+      if (!kitchenDrawerOpen) return 'A small drawer beside the refrigerator. Closed.';
+      const knifeGone = gInventory.includes('knife') || !ITEMS.find(i=>i.id==='knife')?.inKitchenDrawer;
+      return knifeGone
+        ? 'The kitchen drawer is open. Takeout menus, rubber bands, a box of matches.'
+        : 'The kitchen drawer is open. A paring knife, some takeout menus, rubber bands, a box of matches.';
+    },
+  },
+  kitchen: {
+    names: ['kitchen'],
+    desc() {
+      return 'A small, open kitchen along the east wall. A coffee maker on the counter, carafe still half full. '
+           + 'A cabinet above it. A refrigerator humming against the wall. '
+           + 'A gas range in the southeast corner' + (stoveOn ? ' — one burner lit' : '') + '. A few dishes in the sink.';
+    },
+  },
+  window: {
+    names: ['window', 'windows', 'north wall', 'street', 'outside'],
+    desc: 'A single window on the north wall. Rain streaking down the glass. A few cars parked along the curb, not much moving.',
+  },
+  quilt: {
+    names: ['quilt', 'blanket', 'throw', 'patchwork'],
+    desc: 'A worn patchwork quilt draped over the back of the sofa. Soft from years of washing.',
+  },
+  sink: {
+    names: ['sink', 'dishes', 'dish', 'plate', 'plates', 'glass'],
+    desc: 'A few plates and a glass in the sink. Nothing alarming.',
+  },
+  book: {
+    names: ['bookshelf', 'book shelf', 'books', 'book', 'paperback', 'paperbacks', 'fiction', 'textbooks', 'textbook', 'spine', 'north shelf'],
+    desc() {
+      const available = ITEMS.filter(it => it.shelvedBook && !gInventory.includes(it.id) && !it.dropped);
+      const titles = available.map(it => it.label).join(', ');
+      return `A wooden bookshelf along the north wall. Titles: ${titles}.`;
+    },
+  },
+  cassetteShelf: {
+    names: ['cassette shelf', 'cassette rack', 'cassettes', 'tapes', 'tape shelf', 'tape rack'],
+    desc() {
+      const available = ITEMS.filter(it => it.shelvedTape && !gInventory.includes(it.id) && !it.dropped);
+      const titles = available.map(it => it.label).join(', ');
+      return `A small rack of cassettes on the shelf beside the boombox. You can see: ${titles}.`;
+    },
+  },
+  boombox: {
+    names: ['boombox', 'boom box', 'boom-box', 'stereo', 'tape player', 'cassette player', 'tape deck'],
+    desc() {
+      if (!boomBoxOn) return 'A battered boombox on the shelf near the cassettes. Power light off.';
+      if (cassettePlaying) return `The boombox is on. ${cassettePlaying} is playing.`;
+      return "The boombox is on. Nothing in the deck — just a hiss of static.";
+    },
+    toggle: true,
+    turnOn()  { boomBoxOn = true;  addLine('You click the boombox on. It hisses to life.'); },
+    turnOff() { boomBoxOn = false; cassettePlaying = null; addLine('You click the boombox off.'); },
+  },
+  floor: {
+    names: ['floor', 'ground', 'rug', 'area rug', 'carpet'],
+    desc: 'Hardwood with an old area rug under the sofa. Worn thin in the middle.',
+  },
+  ceiling: {
+    names: ['ceiling'],
+    desc: "A water stain in one corner that's been there long enough nobody notices it anymore.",
+  },
+  walls: {
+    names: ['wall', 'walls', 'south wall', 'west wall', 'east wall'],
+    desc: 'Plain walls. A few scuff marks near the baseboard. A faded poster near the door.',
+  },
+  poster: {
+    names: ['poster', 'show poster', 'concert poster'],
+    desc: 'A faded concert poster near the door. Hard to make out the band now.',
+  },
+  door: {
+    names: ['door', 'front door'],
+    desc: "The front door. Closed.",
+  },
+  phoneTable: {
+    names: ['phone table', 'side table', 'small table', 'corner table', 'nw corner', 'northwest corner'],
+    desc() {
+      return `A small table wedged into the northwest corner. A phone and an answering machine sit on it.${messageHeard ? '' : ' The answering machine\'s red light is blinking.'}`;
+    },
+  },
+  phone: {
+    names: ['phone', 'telephone', 'handset', 'receiver'],
+    desc() {
+      return 'A push-button phone. Off-white, cord wrapped around the base a few times.';
+    },
+  },
+  answeringMachine: {
+    names: ['answering machine', 'machine', 'messages', 'voicemail', 'tape', 'message light', 'blinking light', 'red light'],
+    desc() {
+      return messageHeard
+        ? 'The answering machine. Red light is off — no new messages.'
+        : 'The answering machine. The red light is blinking. One message.';
+    },
+  },
+};
+
+/* ════════════════════════════════════════════════════════════════════════════
+   TERMINAL ENGINE
+   ════════════════════════════════════════════════════════════════════════════ */
+
+const outputEl = document.getElementById('output');
+const promptEl = document.getElementById('prompt');
+const inputEl  = document.getElementById('cmd-input');
+const panelEl  = document.getElementById('panel');
+
+// ── State ─────────────────────────────────────────────────────────────────
+let state        = 'shell'; // shell | more | game
+let cwd          = CONFIG.HOME;
+let loggedIn     = false;
+let currentUser  = null;
+let prevState    = 'shell'; // state to restore after `more` pager
+let history      = [];      // shell command history
+let histIdx      = -1;
+let moreBuf      = [];
+let gHistory     = [];      // game command history
+let gHistIdx     = -1;
+let gInventory   = [];      // game item ids being carried
+let lampOn       = true;    // lamp state
+let tvOn         = false;   // tv state
+let recordPlaying = null;   // label of record currently on turntable
+let cabinetOpen   = false;   // kitchen cabinet state
+let mugFilled     = false;   // whether the mug has coffee in it
+let seated        = false;   // player is sitting on the sofa
+let boomBoxOn     = false;   // boombox power state
+let cassettePlaying = null;  // label of cassette currently playing
+let fridgeOpen    = false;   // fridge door state
+let drawerOpen    = false;   // desk drawer state
+let floppyInserted = false;  // floppy disk is in the drive
+let messageHeard  = false;   // answering machine message has been played
+let floppyRead    = false;   // player has read the floppy letter
+let awaitingFloppyPass = false; // waiting for floppy password input
+let floppyUnlocked     = false; // floppy password has been accepted this session
+let kitchenDrawerOpen = false; // kitchen drawer by the fridge
+let stoveOn           = false; // stove burner is lit
+let scrappleInPan     = false; // scrapple has been sliced into the pan
+let scrappleCooked    = false; // scrapple is fully cooked and ready to eat
+let ejectNudged   = false;   // eject nudge has been shown once since reading
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function addLine(text = '', cls = '') {
+  const span = document.createElement('span');
+  span.className = 'line' + (cls ? ' ' + cls : '');
+  span.textContent = text;
+  outputEl.appendChild(span);
+  outputEl.scrollTop = outputEl.scrollHeight;
+  return span;
+}
+
+function clearOutput() { outputEl.innerHTML = ''; }
+
+// ── SHA-256 via Web Crypto ─────────────────────────────────────────────────
+async function sha256hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ── Path helpers ───────────────────────────────────────────────────────────
+function normPath(p) {
+  const parts = p.split('/').filter(Boolean);
+  const out = [];
+  for (const seg of parts) {
+    if (seg === '..') { if (out.length) out.pop(); }
+    else if (seg !== '.') out.push(seg);
+  }
+  return '/' + out.join('/');
+}
+
+// Expand ~ at start of path, then resolve relative to cwd
+function resolvePath(arg) {
+  if (!arg || arg === '.') return cwd;
+  if (arg === '~')         return CONFIG.HOME;
+  if (arg.startsWith('~/')) return normPath(CONFIG.HOME + '/' + arg.slice(2));
+  if (arg.startsWith('/'))  return normPath(arg);
+  return normPath(cwd + '/' + arg);
+}
+
+// Direct children of dirPath (one level only)
+function children(dirPath, showHidden = false) {
+  const prefix = dirPath === '/' ? '/' : dirPath + '/';
+  return Object.keys(FS)
+    .filter(k => {
+      if (k === dirPath) return false;
+      if (!k.startsWith(prefix)) return false;
+      const rest = k.slice(prefix.length);
+      if (rest.includes('/')) return false;
+      if (!showHidden && FS[k].hidden) return false;
+      return true;
+    })
+    .sort();  // alphabetical, like real ls
+}
+
+// ── Status panel ──────────────────────────────────────────────────────────
+function cwdDisplay() {
+  return cwd.startsWith(CONFIG.HOME)
+    ? '~' + cwd.slice(CONFIG.HOME.length)
+    : cwd;
+}
+
+function updatePanel() {
+  panelEl.innerHTML =
+    `<span>────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>\n` +
+    `<span><span class="norm">  Buckingham Sim 93</span></span>\n` +
+    `<span>────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>`;
+}
+
+// ── Boot: skip straight to shell ───────────────────────────────────────────
+function boot() {
+  currentUser = CONFIG.LOGIN_USER;
+  loggedIn    = true;
+  cwd         = CONFIG.HOME;
+  updatePanel();
+
+  for (const line of MOTD.trim().split('\n')) addLine(line, 'dim');
+  addLine('');
+
+  state = 'shell';
+  showPrompt();
+  inputEl.focus();
+}
+
+// ── Shell prompt ───────────────────────────────────────────────────────────
+function showPrompt() {
+  promptEl.textContent = '$ ';
+  inputEl.disabled = false;
+  inputEl.value = '';
+  updatePanel();
+}
+
+// ── Pager ──────────────────────────────────────────────────────────────────
+const PAGE = 22;
+
+function startMore(lines, returnState) {
+  prevState = returnState || 'shell';
+  moreBuf   = [...lines];
+  outputMore();
+}
+
+function outputMore() {
+  const chunk = moreBuf.splice(0, PAGE);
+  for (const l of chunk) addLine(l);
+  if (moreBuf.length > 0) {
+    addLine('--More-- (press SPACE or ENTER, q to quit)', 'dim');
+    state = 'more';
+    promptEl.textContent = '';
+    inputEl.value = '';
+  }
+}
+
+// ── Commands ───────────────────────────────────────────────────────────────
+
+function cmdLs(rawArgs) {
+  let showHidden = false;
+  let long       = false;
+  const targets  = [];
+
+  for (const a of rawArgs) {
+    if (a.startsWith('-')) {
+      if (a.includes('a')) showHidden = true;
+      if (a.includes('l')) long       = true;
+    } else {
+      targets.push(a);
+    }
+  }
+
+  // Default to cwd if no paths given
+  const paths = targets.length ? targets.map(t => ({ arg: t, path: resolvePath(t) }))
+                                : [{ arg: null, path: cwd }];
+
+  for (const { arg, path } of paths) {
+    const node = FS[path];
+    if (!node) {
+      addLine(`ls: ${arg}: No such file or directory`, 'err');
+      continue;
+    }
+
+    if (node.type === 'file') {
+      addLine(long ? fmtLong(path, node) : path.split('/').pop());
+      continue;
+    }
+
+    // Directory
+    if (paths.length > 1) addLine(`${path}:`);   // heading when listing multiple dirs
+
+    const kids = children(path, showHidden);
+
+    if (long) {
+      const total = kids.reduce((n, k) => n + Math.ceil((FS[k].size || 0) / 512), 0);
+      addLine(`total ${total}`);
+      if (showHidden) {
+        addLine(fmtLong(path, node, '.'));
+        const parentPath = normPath(path + '/..');
+        const parentNode = FS[parentPath] || node;
+        addLine(fmtLong(parentPath, parentNode, '..'));
+      }
+      for (const k of kids) addLine(fmtLong(k, FS[k]));
+    } else {
+      if (kids.length) addLine(kids.map(k => k.split('/').pop()).join('  '));
+    }
+
+    if (paths.length > 1) addLine('');
+  }
+}
+
+function fmtLong(path, node, nameOverride) {
+  const name    = nameOverride || path.split('/').pop();
+  const nlinks  = node.type === 'dir' ? 2 : 1;
+  return `${node.perms}  ${String(nlinks).padStart(3)} ${node.owner.padEnd(8)} ${node.group.padEnd(8)} ${String(node.size).padStart(6)} ${node.mtime} ${name}`;
+}
+
+function cmdCat(args) {
+  if (!args.length) { addLine('usage: cat file ...', 'dim'); return; }
+  for (const a of args) {
+    const path = resolvePath(a);
+    const node = FS[path];
+    if (!node)                              { addLine(`cat: ${a}: No such file or directory`, 'err'); continue; }
+    if (node.type === 'dir')                { addLine(`cat: ${a}: Is a directory`, 'err');            continue; }
+    if (node.protected && !loggedIn)        { addLine(`cat: ${a}: Permission denied`, 'err');         continue; }
+    for (const line of (node.content || '').split('\n')) addLine(line);
+  }
+}
+
+function cmdMore(args) {
+  if (!args.length) { addLine('usage: more file ...', 'dim'); return; }
+  const a    = args[0];
+  const path = resolvePath(a);
+  const node = FS[path];
+  if (!node)                        { addLine(`more: ${a}: No such file or directory`, 'err'); return; }
+  if (node.type === 'dir')          { addLine(`more: ${a}: Is a directory`, 'err');            return; }
+  if (node.protected && !loggedIn)  { addLine(`more: ${a}: Permission denied`, 'err');         return; }
+  startMore((node.content || '').split('\n'), state);
+}
+
+function cmdCd(args) {
+  const target = args[0] || '~';
+  const path   = resolvePath(target);
+  const node   = FS[path];
+  if (!node)                 { addLine(`cd: ${target}: No such file or directory`, 'err'); return; }
+  if (node.type !== 'dir')   { addLine(`cd: ${target}: Not a directory`, 'err');           return; }
+  cwd = path;
+  updatePanel();
+}
+
+function cmdPwd()    { addLine(cwd); }
+function cmdWhoami() { addLine(currentUser || 'nobody'); }
+function cmdDate()   { addLine(CONFIG.BOOT_DATE); }
+function cmdEcho(args) { addLine(args.join(' ')); }
+
+function cmdUname(args) {
+  const host = CONFIG.HOSTNAME.split('.')[0];
+  if (args.includes('-a')) addLine(`SunOS ${CONFIG.HOSTNAME} 4.1.3 1 sun4m`);
+  else                     addLine('SunOS');
+}
+
+function cmdFinger(args) {
+  const target = args[0] || CONFIG.LOGIN_USER;
+  const home   = CONFIG.HOME;
+  const plan   = FS[home + '/.plan'];
+
+  // Only know about the local user
+  if (target !== CONFIG.LOGIN_USER) {
+    addLine(`finger: ${target}: no such user.`, 'err');
+    return;
+  }
+  addLine(`Login: ${CONFIG.LOGIN_USER.padEnd(32)} Name: ${CONFIG.LOGIN_USER}`);
+  addLine(`Directory: ${home.padEnd(24)} Shell: /usr/ucb/csh`);
+  addLine(`On since ${CONFIG.BOOT_DATE} on console`);
+  if (plan) {
+    addLine('Plan:');
+    for (const l of plan.content.split('\n')) addLine(l);
+  }
+}
+
+function cmdFile(args) {
+  if (!args.length) { addLine('usage: file name ...', 'dim'); return; }
+  for (const a of args) {
+    const path = resolvePath(a);
+    const node = FS[path];
+    if (!node)               { addLine(`${a}: cannot open`, 'err'); continue; }
+    if (node.type === 'dir') { addLine(`${a}: directory`);          continue; }
+    // Guess type from perms and content
+    const content = node.content || '';
+    if (node.perms.includes('x') || content.startsWith('#!'))
+      addLine(`${a}: commands text`);
+    else
+      addLine(`${a}: ascii text`);
+  }
+}
+
+function cmdHelp() {
+  const lines = [
+    'Commands:',
+    '',
+    '  ls  [-la]  [path ...]  — list directory',
+    '  cat  <file ...>        — print file(s)',
+    '  more <file>            — page through a file',
+    '  cd   [dir]             — change directory  (cd alone goes home)',
+    '  pwd                    — print working directory',
+    '  whoami                 — print current user',
+    '  finger [user]          — user information',
+    '  date                   — print date and time',
+    '  uname [-a]             — system information',
+    '  file  <name ...>       — identify file type',
+    '  echo  [text]           — print text',
+    '  clear                  — clear screen',
+    '  logout / exit          — log out',
+    '  buckingham             — start the game',
+    '  help / ?               — this message',
+  ];
+  for (const l of lines) addLine(l);
+}
+
+function cmdLogout() {
+  // Reset game state so a new session starts fresh
+  gInventory = [];
+  for (const it of ITEMS) {
+    if (Object.prototype.hasOwnProperty.call(it, '_origHidden'))
+      it.hidden = it._origHidden;
+  }
+  cwd = CONFIG.HOME;
+  clearOutput();
+  for (const line of MOTD.trim().split('\n')) addLine(line, 'dim');
+  addLine('');
+  state = 'shell';
+  showPrompt();
+}
+
+// ── Command dispatch ────────────────────────────────────────────────────────
+function handleCommand(raw) {
+  // Always echo and show a new prompt — even for empty Enter
+  addLine(promptEl.textContent + raw, 'hi');
+
+  const trimmed = raw.trim();
+  if (!trimmed) { addLine(''); showPrompt(); return; }
+
+  // Record history (skip duplicates)
+  if (history[history.length - 1] !== trimmed) history.push(trimmed);
+  histIdx = -1;
+
+  // Split preserving original case for arguments; lowercase only the verb
+  const tokens  = trimmed.split(/\s+/);
+  const cmdRaw  = tokens[0];
+  const cmdLow  = cmdRaw.toLowerCase();
+  const args    = tokens.slice(1);
+
+  switch (cmdLow) {
+    case 'ls':      cmdLs(args);      break;
+    case 'cat':     cmdCat(args);     break;
+    case 'more':
+    case 'less':    cmdMore(args);    break;
+    case 'cd':      cmdCd(args);      break;
+    case 'pwd':     cmdPwd();         break;
+    case 'whoami':  cmdWhoami();      break;
+    case 'date':    cmdDate();        break;
+    case 'uname':   cmdUname(args);   break;
+    case 'finger':  cmdFinger(args);  break;
+    case 'file':    cmdFile(args);    break;
+    case 'echo':    cmdEcho(args);    break;
+    case 'clear':   clearOutput(); showPrompt(); return;
+    case 'help':
+    case '?':       cmdHelp();        break;
+    case 'logout':
+    case 'exit':
+    case 'bye':     cmdLogout();      return;
+    case 'buckingham': startAdventure(); return;
+    case 'vi':
+    case 'emacs':
+    case 'pico':
+      addLine(`${cmdRaw}: editor not available in this environment`, 'dim');
+      break;
+    case 'man':
+      addLine(args.length ? `No manual entry for ${args[0]}` : 'What manual page do you want?', 'dim');
+      break;
+    default: {
+      // Check absolute path (e.g. /mnt/floppy/letters)
+      const absNode = cmdRaw.startsWith('/') ? FS[normPath(cmdRaw)] : null;
+      // Check relative / . in PATH
+      const localPath = resolvePath(cmdRaw);
+      const localNode = absNode || FS[localPath];
+      const targetPath = absNode ? normPath(cmdRaw) : localPath;
+
+      if (localNode && localNode.type === 'file' && localNode.perms.includes('x')) {
+        if (targetPath === '/mnt/floppy/letters') { startAdventure(); return; }
+        addLine(`${cmdRaw}: executed.`, 'dim');
+      } else if (FS[localPath] && FS[localPath].type === 'dir') {
+        addLine(`${cmdRaw}: is a directory`, 'err');
+      } else {
+        addLine(`${cmdRaw}: Command not found.`, 'err');
+      }
+    }
+  }
+
+  addLine('');
+  showPrompt();
+}
+
+// ── Adventure game ─────────────────────────────────────────────────────────
+
+// Save each item's original state on first load so logout can restore it
+for (const it of ITEMS) {
+  it._origHidden    = it.hidden    || false;
+  it._origInCabinet       = it.inCabinet       || false;
+  it._origInFridge        = it.inFridge        || false;
+  it._origInDrawer        = it.inDrawer        || false;
+  it._origInKitchenDrawer = it.inKitchenDrawer || false;
+}
+
+function startAdventure() {
+  gInventory    = [];
+  gHistory      = [];
+  gHistIdx      = -1;
+  lampOn        = true;
+  tvOn          = false;
+  recordPlaying = null;
+  cabinetOpen     = false;
+  mugFilled       = false;
+  seated          = false;
+  boomBoxOn       = false;
+  cassettePlaying = null;
+  fridgeOpen      = false;
+  drawerOpen      = false;
+  floppyInserted    = false;
+  messageHeard      = false;
+  floppyRead        = false;
+  ejectNudged       = false;
+  awaitingFloppyPass = false;
+  floppyUnlocked     = false;
+  kitchenDrawerOpen = false;
+  stoveOn           = false;
+  scrappleInPan     = false;
+  scrappleCooked    = false;
+  for (const it of ITEMS) {
+    it.hidden          = it._origHidden;
+    it.inCabinet       = it._origInCabinet;
+    it.inFridge        = it._origInFridge;
+    it.inDrawer        = it._origInDrawer;
+    it.inKitchenDrawer = it._origInKitchenDrawer;
+    it.dropped         = false;
+  }
+
+  addLine('');
+  addLine('Loading...', 'dim');
+  addLine('');
+  addLine('──────────────────────────────────────────────────────────────────', 'dim');
+  addLine('');
+  gameLook();
+  addLine('');
+  addLine('(type  help  for a list of commands)', 'dim');
+  addLine('');
+  state = 'game';
+  promptEl.textContent = '> ';
+  inputEl.value = '';
+}
+
+function gameItem(word) {
+  const w = word.toLowerCase().trim();
+  return ITEMS.find(it => it.id === w || it.label.toLowerCase().includes(w));
+}
+
+function findScenery(word) {
+  const w      = word.toLowerCase().trim();
+  const wWords = w.split(/\s+/);
+  return Object.values(SCENERY).find(s => s.names.some(n => {
+    if (n === w) return true;                                         // exact match
+    const nWords = n.split(/\s+/);
+    if (nWords.length === 1 && wWords.includes(n)) return true;      // "lamp" in "old lamp"
+    if (wWords.length === 1 && nWords.includes(w)) return true;      // "lamp" matches name "old lamp"
+    if (nWords.length > 1 && wWords.length > 1)
+      return w.includes(n) || n.includes(w);                         // multi-word phrase overlap
+    return false;
+  }));
+}
+
+function gameLook() {
+  addLine('THE LIVING ROOM', 'hi');
+  addLine('');
+  if (!lampOn) {
+    addLine('The lamp is off. The room is dark.');
+    if (seated) addLine('You are sitting on the sofa.', 'dim');
+    return;
+  }
+  for (const line of ROOM_DESC.split('\n')) addLine(line);
+  if (!messageHeard) addLine('The answering machine light is blinking.', 'dim');
+  addLine('');
+  // Only show items loose in the room (not stored on any shelf/surface, not hidden)
+  const here = ITEMS.filter(it =>
+    !it.hidden && !it.inCabinet && !it.inFridge && !it.inDrawer && !it.inKitchenDrawer &&
+    !gInventory.includes(it.id) &&
+    (it.dropped || (!it.onDesk && !it.shelved && !it.shelvedTape && !it.shelvedBook)));
+  for (const it of here) {
+    const desc = typeof it.roomDesc === 'function' ? it.roomDesc()
+               : it.roomDesc || `${it.label.charAt(0).toUpperCase() + it.label.slice(1)} is here.`;
+    addLine(desc, 'dim');
+  }
+  if (seated) addLine('You are sitting on the sofa.', 'dim');
+}
+
+function gameTake(args) {
+  if (!args.length) { addLine('Take what?'); return; }
+  const word = args.join(' ');
+
+  // Taking a single pen from the desk cup
+  if (/^(pen|pens|a pen|the pen|the pens)$/.test(word)) {
+    if (gInventory.includes('pen')) { addLine("You already have a pen."); return; }
+    const penItem = ITEMS.find(it => it.id === 'pen');
+    penItem.hidden = false;
+    gInventory.push('pen');
+    addLine('You take one of the pens.');
+    return;
+  }
+
+  // Generic "record"
+  if (/^(record|a record|the record)$/.test(word)) {
+    const available = ITEMS.filter(it => it.shelved && !gInventory.includes(it.id) && !it.dropped);
+    if (!available.length) { addLine('There are no records left on the shelf.'); return; }
+    if (available.length === 1) { gInventory.push(available[0].id); addLine(`You take ${available[0].label} off the shelf.`); }
+    else { addLine('Which record?'); for (const r of available) addLine(`  ${r.label}`); }
+    return;
+  }
+
+  // Generic "cassette" / "tape"
+  if (/^(cassette|tape|a cassette|a tape)$/.test(word)) {
+    const available = ITEMS.filter(it => it.shelvedTape && !gInventory.includes(it.id) && !it.dropped);
+    if (!available.length) { addLine('There are no cassettes on the shelf.'); return; }
+    if (available.length === 1) { gInventory.push(available[0].id); addLine(`You take ${available[0].label} from the rack.`); }
+    else { addLine('Which tape?'); for (const t of available) addLine(`  ${t.label}`); }
+    return;
+  }
+
+  // Generic "beer"
+  if (/^(beer|a beer|the beer)$/.test(word)) {
+    if (!fridgeOpen) { addLine('The fridge is closed.'); return; }
+    const available = ITEMS.filter(it => it.inFridge && !gInventory.includes(it.id));
+    if (!available.length) { addLine("There's nothing cold left."); return; }
+    if (available.length === 1) { available[0].inFridge = false; gInventory.push(available[0].id); addLine(`You grab ${available[0].label} from the fridge.`); }
+    else { addLine('Which one?'); for (const b of available) addLine(`  ${b.label}`); }
+    return;
+  }
+
+  // Floppy — special: might be in drive, not just drawer
+  if (/^(floppy|floppy disk|disk|the floppy|the disk)$/.test(word)) {
+    if (gInventory.includes('floppy')) { addLine("You're already holding it."); return; }
+    if (floppyInserted) { addLine('The disk is in the drive. Eject it first.'); return; }
+    const fl = ITEMS.find(it => it.id === 'floppy');
+    if (fl.inDrawer && !drawerOpen) { addLine('The drawer is closed.'); return; }
+    const wasInDrawer = fl.inDrawer;
+    fl.inDrawer = false;
+    gInventory.push('floppy');
+    addLine(wasInDrawer ? 'You take the floppy disk from the drawer.' : 'You pick up the floppy disk.');
+    return;
+  }
+
+  const it = gameItem(word);
+  if (!it || it.hidden)           { addLine("You don't see that here.");      return; }
+  if (gInventory.includes(it.id)) { addLine("You're already carrying that."); return; }
+  if (it.id === 'scrapple' && scrappleInPan) { addLine("The scrapple is in the pan."); return; }
+  if (it.inCabinet       && !cabinetOpen)       { addLine("The cabinet is closed."); return; }
+  if (it.inFridge        && !fridgeOpen)         { addLine("The fridge is closed."); return; }
+  if (it.inDrawer        && !drawerOpen)         { addLine("The drawer is closed."); return; }
+  if (it.inKitchenDrawer && !kitchenDrawerOpen)  { addLine("The kitchen drawer is closed."); return; }
+  const wasInCabinet       = it.inCabinet;
+  const wasInFridge        = it.inFridge;
+  const wasInDrawer        = it.inDrawer;
+  const wasInKitchenDrawer = it.inKitchenDrawer;
+  it.inCabinet       = false;
+  it.inFridge        = false;
+  it.inDrawer        = false;
+  it.inKitchenDrawer = false;
+  const wasDrop = it.dropped;
+  it.dropped   = false;
+  gInventory.push(it.id);
+  if (wasDrop)                  addLine(`You pick up ${it.label}.`);
+  else if (it.shelved)          addLine(`You take ${it.label} off the shelf.`);
+  else if (it.shelvedTape)      addLine(`You take ${it.label} from the rack.`);
+  else if (wasInCabinet)        addLine(`You take ${it.label} from the cabinet.`);
+  else if (wasInFridge)         addLine(`You grab ${it.label} from the fridge.`);
+  else if (wasInDrawer)         addLine(`You take ${it.label} from the drawer.`);
+  else if (wasInKitchenDrawer)  addLine(`You take ${it.label} from the kitchen drawer.`);
+  else                          addLine(`You pick up ${it.label}.`);
+}
+
+function gameDrop(args) {
+  if (!args.length) { addLine('Drop what?'); return; }
+  // Strip trailing filler words ("put record back", "put it down", "put away")
+  const raw = args.join(' ').replace(/\s+(back|away|down|there|here)$/, '').trim();
+  const it = gameItem(raw);
+  if (!it || !gInventory.includes(it.id)) { addLine("You're not carrying that."); return; }
+  gInventory = gInventory.filter(id => id !== it.id);
+  it.dropped = true;
+  // Stop playback if the item was active
+  if (it.shelved && recordPlaying === it.label) {
+    recordPlaying = null;
+    addLine(`You set down ${it.label}. The needle skips and goes quiet.`);
+    return;
+  }
+  if (it.shelvedTape && cassettePlaying === it.label) {
+    cassettePlaying = null;
+    addLine(`You set down ${it.label}. The boombox goes quiet.`);
+    return;
+  }
+  addLine(`You set down ${it.label}.`);
+}
+
+function gameRead(args) {
+  if (!args.length) { addLine('Read what?'); return; }
+  const word = args.join(' ');
+
+  // Floppy / letter.txt — reads from drive
+  if (/^(floppy|floppy disk|disk|letter\.txt|the floppy|the disk|file)$/.test(word)) {
+    if (!floppyInserted) {
+      if (gInventory.includes('floppy'))
+        addLine('Insert the disk into the drive first.');
+      else
+        addLine("There's no disk in the drive.");
+      return;
+    }
+    // Password gate
+    const locked = CONFIG.FLOPPY_PASS_HASH && CONFIG.FLOPPY_PASS_HASH !== 'PASTE_YOUR_HASH_HERE'
+                   && CONFIG.FLOPPY_PASS_HASH !== 'DISABLED';
+    if (locked && !floppyUnlocked) {
+      addLine('');
+      addLine('This disk is password protected.', 'dim');
+      addLine('Enter password.', 'dim');
+      addLine('');
+      awaitingFloppyPass = true;
+      promptEl.textContent = 'Password: ';
+      inputEl.setAttribute('data-mode', 'password');
+      return;
+    }
+    const fl = ITEMS.find(i => i.id === 'floppy');
+    addLine('');
+    addLine('[ letter.txt — Floppy Letter 2601 ]', 'dim');
+    addLine('');
+    for (const line of fl.content.split('\n')) addLine(line, 'white');
+    floppyRead = true;
+    ejectNudged = false;
+    addLine('');
+    addLine('( eject floppy when you\'re done )', 'dim');
+    return;
+  }
+
+  const it = gameItem(word);
+  if (!it || it.hidden) { addLine("You don't see that here."); return; }
+  if (it.inCabinet       && !cabinetOpen)       { addLine("You don't see that here."); return; }
+  if (it.inFridge        && !fridgeOpen)        { addLine("You don't see that here."); return; }
+  if (it.inDrawer        && !drawerOpen)        { addLine("You don't see that here."); return; }
+  if (it.inKitchenDrawer && !kitchenDrawerOpen) { addLine("You don't see that here."); return; }
+  if (!it.content) { addLine(`There's nothing to read on ${it.label}.`); return; }
+  addLine('');
+  for (const line of it.content.split('\n')) addLine(line);
+  if (it.reveals) {
+    const revealed = ITEMS.find(i => i.id === it.reveals);
+    if (revealed && revealed.hidden) {
+      revealed.hidden = false;
+      addLine('');
+      addLine(revealed.roomDesc, 'dim');
+    }
+  }
+}
+
+function gameExamine(args) {
+  if (!args.length) { addLine('Examine what?'); return; }
+  // Strip leading articles
+  while (args.length && (args[0] === 'the' || args[0] === 'a' || args[0] === 'an')) args = args.slice(1);
+  if (!args.length) { addLine('Examine what?'); return; }
+  const word = args.join(' ');
+
+  // Special targets
+  if (/^(room|here|around|place|apartment)$/.test(word)) { gameLook(); return; }
+  if (/^(me|myself|self|you|yourself|hands|body|i)$/.test(word)) {
+    const carrying = gInventory.length
+      ? 'carrying ' + gInventory.map(id => ITEMS.find(i => i.id === id)?.label).join(', ')
+      : 'not carrying anything';
+    addLine(seated
+      ? `You're sitting on the sofa, ${carrying}.`
+      : `You're standing in the living room, ${carrying}.`);
+    return;
+  }
+  if (/^(nothing|air|darkness)$/.test(word)) { addLine('Right.'); return; }
+
+  // Check scenery first
+  const sc = findScenery(word);
+  if (sc) { addLine(typeof sc.desc === 'function' ? sc.desc() : sc.desc); return; }
+
+  // Then items
+  const it = gameItem(word);
+  if (!it || it.hidden) { addLine("You don't see that here."); return; }
+  if (it.inDrawer        && !drawerOpen        && !gInventory.includes(it.id)) { addLine("You don't see that here."); return; }
+  if (it.inCabinet       && !cabinetOpen       && !gInventory.includes(it.id)) { addLine("You don't see that here."); return; }
+  if (it.inFridge        && !fridgeOpen        && !gInventory.includes(it.id)) { addLine("You don't see that here."); return; }
+  if (it.inKitchenDrawer && !kitchenDrawerOpen && !gInventory.includes(it.id)) { addLine("You don't see that here."); return; }
+  if (it.id === 'scrapple' && scrappleInPan && !gInventory.includes('scrapple')) { /* in pan — still examinable */ }
+  addLine(typeof it.examDesc === 'function' ? it.examDesc() : it.examDesc);
+}
+
+function gameInventory() {
+  if (!gInventory.length) { addLine("You aren't carrying anything."); return; }
+  addLine('You are carrying:');
+  for (const id of gInventory) {
+    const it = ITEMS.find(i => i.id === id);
+    if (it) addLine(`  ${it.label}`);
+  }
+}
+
+function gameToggle(args, on) {
+  if (!args.length) { addLine(on ? 'Turn what on?' : 'Turn what off?'); return; }
+  const word = args.join(' ');
+  const sc   = findScenery(word);
+  if (!sc || !sc.toggle) { addLine(`You can't turn that ${on ? 'on' : 'off'}.`); return; }
+  if (on)  sc.turnOn();
+  else     sc.turnOff();
+}
+
+function gamePlay(args) {
+  if (!args.length) { addLine('Play a record, a tape, or  play messages  for the answering machine.'); return; }
+  const word = args.join(' ').replace(/^(the\s+|a\s+)/, '');
+  const it   = gameItem(word);
+
+  if (!it) { addLine("You don't have that."); return; }
+
+  if (it.shelvedTape) {
+    if (!gInventory.includes(it.id)) { addLine(`Take ${it.label} from the rack first.`); return; }
+    if (!boomBoxOn) { addLine("The boombox is off. Turn it on first."); return; }
+    if (cassettePlaying === it.label) { addLine(`${it.label} is already playing.`); return; }
+    if (cassettePlaying) addLine(`You swap out ${cassettePlaying} and pop in ${it.label}.`);
+    else                 addLine(`You pop ${it.label} into the boombox.`);
+    cassettePlaying = it.label;
+    addLine('The tape starts rolling.', 'dim');
+    return;
+  }
+
+  if (it.shelved) {
+    if (!gInventory.includes(it.id)) { addLine(`Take ${it.label} off the shelf first.`); return; }
+    if (recordPlaying === it.label) { addLine(`${it.label} is already on the turntable.`); return; }
+    if (recordPlaying) addLine(`You lift the needle off ${recordPlaying} and put on ${it.label}.`);
+    else               addLine(`You set ${it.label} on the turntable and lower the needle.`);
+    recordPlaying = it.label;
+    addLine('The room fills with music.', 'dim');
+    return;
+  }
+
+  addLine("You can't play that.");
+}
+
+function gameOpen(args) {
+  if (!args.length) { addLine('Open what?'); return; }
+  while (args.length && (args[0] === 'the' || args[0] === 'a')) args = args.slice(1);
+  const word = args.join(' ');
+  if (/cabinet|cupboard/.test(word)) {
+    if (cabinetOpen) { addLine('The cabinet is already open.'); return; }
+    cabinetOpen = true;
+    addLine('You open the cabinet.');
+    if (!gInventory.includes('mug')) addLine("There's a ceramic mug on the shelf inside.", 'dim');
+    return;
+  }
+  if (/fridge|refrigerator|icebox/.test(word)) {
+    if (fridgeOpen) { addLine('The fridge is already open.'); return; }
+    fridgeOpen = true;
+    const items = ITEMS.filter(it => it.inFridge && !gInventory.includes(it.id));
+    addLine('You open the fridge. Cold air spills out.');
+    if (items.length) addLine('Inside: ' + items.map(it => it.label).join(', ') + '.', 'dim');
+    else addLine('Just the leftovers.', 'dim');
+    return;
+  }
+  if (/kitchen drawer|knife drawer|drawer by|silverware|utensil/.test(word)) {
+    if (kitchenDrawerOpen) { addLine('The kitchen drawer is already open.'); return; }
+    kitchenDrawerOpen = true;
+    addLine('You slide open the kitchen drawer.');
+    const kn = ITEMS.find(it => it.id === 'knife');
+    if (kn && kn.inKitchenDrawer && !gInventory.includes('knife'))
+      addLine('Inside: a paring knife, takeout menus, rubber bands, a box of matches.', 'dim');
+    else
+      addLine('Takeout menus, rubber bands, a box of matches.', 'dim');
+    return;
+  }
+  if (/^drawer/.test(word)) {
+    if (drawerOpen) { addLine('The drawer is already open.'); return; }
+    drawerOpen = true;
+    const fl = ITEMS.find(it => it.id === 'floppy');
+    addLine('You slide open the drawer.');
+    if (fl.inDrawer && !gInventory.includes('floppy') && !floppyInserted)
+      addLine('Inside: a 3.5" floppy disk labeled "Floppy Letter 2601".', 'dim');
+    else
+      addLine('The drawer is empty.', 'dim');
+    return;
+  }
+  if (/door/.test(word)) { addLine("You're not going anywhere right now."); return; }
+  addLine("You can't open that.");
+}
+
+function gameInsertFloppy() {
+  if (floppyInserted) { addLine('The disk is already in the drive.'); return; }
+  if (!gInventory.includes('floppy')) { addLine("You don't have the floppy disk."); return; }
+  gInventory = gInventory.filter(id => id !== 'floppy');
+  floppyInserted = true;
+  addLine('You slide the floppy into the drive.');
+  addLine('The drive light blinks. The disk spins up.', 'dim');
+  addLine('Type  read floppy  to access the file.', 'dim');
+}
+
+function gameEjectFloppy() {
+  if (!floppyInserted) { addLine("There's no disk in the drive."); return; }
+  floppyInserted = false;
+  gInventory.push('floppy');
+  addLine('The drive ejects the disk with a click. You take it.');
+  if (floppyRead) {
+    addLine('');
+    addLine('──────────────────────────────────────────────────────────────────', 'dim');
+    addLine('');
+    addLine('CONGRATULATIONS, YOU\'VE READ THE FLOPPY LETTER!', 'hi');
+    addLine('');
+    addLine('──────────────────────────────────────────────────────────────────', 'dim');
+    addLine('');
+  }
+}
+
+function gamePlayMessage() {
+  if (messageHeard) {
+    addLine('You press play. The machine rewinds briefly.');
+    addLine('');
+  } else {
+    addLine('You press play. The tape clicks, then rewinds a little.');
+    addLine('');
+  }
+  addLine('"Hey Joe, it\'s Dan. So Friday I\'ll pick up Dave first, then Dean.', 'dim');
+  addLine('Then I\'ll swing by and get you, and we\'ll get Rodney last.', 'dim');
+  addLine('Then we\'ll rock \'n roll! Alright, badda boom, badda bing,', 'dim');
+  addLine('skatamoosh, do the fandango, good bye!"', 'dim');
+  addLine('');
+  addLine('[end of messages]', 'dim');
+  messageHeard = true;
+}
+
+function gameFillMug() {
+  if (!gInventory.includes('mug')) {
+    addLine("You'll need a mug first. There might be one in the cabinet.");
+    return;
+  }
+  if (mugFilled) { addLine('The mug is already full.'); return; }
+  mugFilled = true;
+  addLine('You pour yourself a cup of coffee. Not fresh, but it\'ll do.');
+}
+
+function gameDrink(args) {
+  const word = args.join(' ');
+  const beerItem = gInventory.map(id => ITEMS.find(i => i.id === id)).find(it => it && it.drinkable);
+  const hasCoffee = gInventory.includes('mug') && mugFilled;
+
+  // No argument — default to whatever makes sense
+  if (!word) {
+    if (beerItem)  { _drinkBeer(beerItem); return; }
+    if (hasCoffee) { _drinkCoffee(); return; }
+    addLine("You don't have anything to drink.");
+    return;
+  }
+  if (/coffee|mug|cup/.test(word)) {
+    if (!gInventory.includes('mug')) { addLine("You don't have a mug."); return; }
+    if (!mugFilled) { addLine('The mug is empty. The coffee pot is in the kitchen.'); return; }
+    _drinkCoffee(); return;
+  }
+  if (/beer|lager|amber|rolling|yuengling|dock/.test(word) || (beerItem && word.includes(beerItem.id))) {
+    if (!beerItem) { addLine("You don't have a beer. Try the fridge."); return; }
+    _drinkBeer(beerItem); return;
+  }
+  addLine("You can't drink that.");
+}
+
+function _drinkCoffee() {
+  addLine('You take a sip. Lukewarm, a little bitter. Still hits the spot.');
+  mugFilled = false;
+}
+
+function _drinkBeer(it) {
+  gInventory = gInventory.filter(id => id !== it.id);
+  it.hidden = true;  // consumed — no longer in the world
+  if (it.id === 'yuengling')      addLine('You crack open the Yuengling. Cold and crisp. That hits.');
+  else if (it.id === 'dock street') addLine('The Dock Street Amber goes down smooth. Malty. Good call.');
+  else if (it.id === 'rolling rock') addLine("Rolling Rock. Ice cold. The little green bottle. Classic.");
+  else addLine('You drink it down.');
+}
+
+function gameSit(args) {
+  const target = (args || []).join(' ');
+  // "sit on <thing>" — only the sofa makes sense
+  if (target && !/^(down|on (the )?(sofa|couch)|on it)$/.test(target) && !/^(sofa|couch)$/.test(target)) {
+    addLine("You can't sit on that.");
+    return;
+  }
+  if (seated) { addLine("You're already sitting."); return; }
+  seated = true;
+  if (tvOn) addLine("You sink into the sofa. Cracker shifts and presses against your leg. You watch Hogan's Heroes.");
+  else      addLine('You sink into the sofa. Cracker shifts and presses against your leg. The room is quiet.');
+}
+
+function gameStand() {
+  if (!seated) { addLine("You're already on your feet."); return; }
+  seated = false;
+  addLine('You get up.');
+}
+
+function gameGo(args) {
+  if (!args.length) { addLine('Where to?'); return; }
+  const dest = args.join(' ').replace(/^(over to |to |into |in |the )+/g, '').trim();
+  if (/^(east|kitchen)$/.test(dest)) {
+    addLine('You step into the kitchen.');
+    addLine('');
+    addLine(typeof SCENERY.kitchen.desc === 'function' ? SCENERY.kitchen.desc() : SCENERY.kitchen.desc);
+    return;
+  }
+  if (/^(west|desk)$/.test(dest)) {
+    addLine('You walk to the desk.');
+    addLine('');
+    addLine(typeof SCENERY.desk.desc === 'function' ? SCENERY.desk.desc() : SCENERY.desk.desc);
+    return;
+  }
+  if (/^(south|shelf|shelves|records?|vinyl)$/.test(dest)) {
+    addLine('You walk to the record shelf.');
+    addLine('');
+    addLine(typeof SCENERY.shelf.desc === 'function' ? SCENERY.shelf.desc() : SCENERY.shelf.desc);
+    return;
+  }
+  if (/^(north|bookshelf|books|cassettes|tapes|boombox)$/.test(dest)) {
+    addLine('You walk to the north shelves.');
+    addLine('');
+    addLine(typeof SCENERY.book.desc === 'function' ? SCENERY.book.desc() : SCENERY.book.desc);
+    return;
+  }
+  if (/^(sofa|couch)$/.test(dest)) { gameSit([]); return; }
+  if (/^(down|floor)$/.test(dest))  { gameSit([]); return; }
+  if (/^(outside|out|door|front door|leave|exit)$/.test(dest)) {
+    addLine("You're not going anywhere right now.");
+    return;
+  }
+  if (/^(up|upstairs|stairs)$/.test(dest)) {
+    addLine("There are no stairs.");
+    return;
+  }
+  // Try to match any known scenery object as a destination
+  const sc = findScenery(dest);
+  if (sc) {
+    const kitchenThings = /fridge|refrigerator|stove|range|burner|cabinet|coffee|sink|counter|kitchen drawer/;
+    const prefix = kitchenThings.test(dest)
+      ? 'You step into the kitchen.'
+      : 'You walk over.';
+    addLine(prefix);
+    addLine('');
+    addLine(typeof sc.desc === 'function' ? sc.desc() : sc.desc);
+    return;
+  }
+  addLine("You wander a bit but end up in the same spot.");
+}
+
+function gameWatch(args) {
+  const target = (args || []).join(' ');
+  if (target && !/tv|television|set|show|hogan|screen/.test(target)) {
+    addLine("Watch what?");
+    return;
+  }
+  if (!tvOn) { addLine("The TV is off."); return; }
+  if (seated) addLine("You watch from the sofa. Schultz suspects nothing. As usual.");
+  else        addLine("You stand in front of the TV. Hogan's Heroes. The laugh track fills the room.");
+}
+
+function gameListen(args) {
+  const target = (args || []).join(' ');
+  if (!target || target === 'to') {
+    if (scrappleInPan && stoveOn && !scrappleCooked) {
+      addLine('The scrapple sizzles in the pan. A steady, satisfying sound from the kitchen.');
+      if (recordPlaying || cassettePlaying) addLine('Music underneath it.');
+      return;
+    }
+    if (recordPlaying && cassettePlaying) {
+      addLine(`Both the turntable (${recordPlaying}) and the boombox (${cassettePlaying}) are going. It's a lot.`);
+    } else if (recordPlaying) {
+      addLine(`${recordPlaying} is on the turntable. The record crackles softly between songs.`);
+    } else if (cassettePlaying) {
+      addLine(`${cassettePlaying} is playing on the boombox.`);
+    } else if (tvOn) {
+      addLine("The laugh track from Hogan's Heroes drifts over from the TV.");
+    } else {
+      addLine("Rain against the windows. The refrigerator hums in the kitchen.");
+    }
+    return;
+  }
+  if (/record|turntable|vinyl|needle/.test(target)) {
+    if (recordPlaying) addLine(`${recordPlaying} is on the turntable. Sounds good.`);
+    else               addLine("The turntable is quiet. Put a record on.");
+    return;
+  }
+  if (/boombox|boom box|cassette|tape|stereo/.test(target)) {
+    if (cassettePlaying) addLine(`${cassettePlaying} is playing on the boombox.`);
+    else if (boomBoxOn)  addLine("The boombox is on but nothing's in the deck.");
+    else                 addLine("The boombox is off.");
+    return;
+  }
+  if (/tv|television|set/.test(target)) {
+    if (tvOn) addLine("The laugh track from Hogan's Heroes.");
+    else      addLine("The TV is off.");
+    return;
+  }
+  if (/outside|street|window|traffic/.test(target)) {
+    addLine("Rain on the glass. Steady, soft. A car hisses by on the wet street.");
+    return;
+  }
+  if (/fridge|refrigerator/.test(target)) {
+    addLine("A low hum from the kitchen. Always on.");
+    return;
+  }
+  if (/cat|cracker|kitty/.test(target)) {
+    addLine(seated ? 'A slow, faint purr. She\'s out cold.' : 'Slow breathing. Maybe a faint purr.');
+    return;
+  }
+  if (/stove|pan|skillet|scrapple|sizzl/.test(target)) {
+    if (scrappleInPan && stoveOn && !scrappleCooked) addLine("A steady sizzle. It's working.");
+    else if (scrappleCooked)                         addLine('Quiet now. The scrapple is done.');
+    else                                             addLine("Nothing. The stove is off.");
+    return;
+  }
+  addLine("You don't hear much.");
+}
+
+function gameSmell(args) {
+  const target = (args || []).join(' ');
+  if (!target) {
+    const parts = [];
+    if (scrappleInPan && stoveOn && !scrappleCooked) parts.push('sizzling scrapple — sage, cornmeal, pork fat. It fills the whole apartment');
+    else if (scrappleCooked) parts.push('cooked scrapple going cold in the kitchen');
+    parts.push('rain coming through the window crack');
+    parts.push('old paperbacks');
+    if (mugFilled && gInventory.includes('mug')) parts.push('the coffee in your hand');
+    else parts.push('old coffee from the kitchen');
+    if (recordPlaying) parts.push('warm vinyl');
+    else parts.push('faint vinyl');
+    if (tvOn) parts.push('a little dust from the TV');
+    addLine(parts.join(', ') + '. The usual.');
+    return;
+  }
+  if (/beer|yuengling|dock street|rolling rock/.test(target)) {
+    addLine('Cold and slightly hoppy. Good smell.');
+    return;
+  }
+  if (/coffee|pot|carafe|maker/.test(target)) {
+    if (mugFilled && gInventory.includes('mug')) addLine('Your mug still has some. Lukewarm now.');
+    else addLine("That coffee smells like it was made a few hours ago. Still tempting.");
+    return;
+  }
+  if (/computer|pc|windows|monitor|keyboard|dos/.test(target)) {
+    addLine('Warm electronics and a faint whiff of solder. The smell of a running machine.');
+    return;
+  }
+  if (/floppy|disk/.test(target)) {
+    addLine('Magnetic tape and plastic. That specific 3.5" smell.');
+    return;
+  }
+  if (/record|vinyl|sleeve|album/.test(target)) {
+    if (recordPlaying) addLine('Warm vinyl. The needle is working.');
+    else addLine('Old vinyl and cardboard. A good smell.');
+    return;
+  }
+  if (/cat|cracker|kitty/.test(target)) {
+    addLine('Warm fur and a faint dusty-sweet smell. Clean cat.');
+    return;
+  }
+  if (/scrapple/.test(target)) {
+    if (scrappleCooked)       addLine('Cooked pork and cornmeal. Crispy. You should eat it.');
+    else if (scrappleInPan && stoveOn) addLine('Incredible. Sage, fat, cornmeal hitting a hot pan. One of the best smells there is.');
+    else if (scrappleInPan)   addLine('Raw scrapple — faint sage and cornmeal. Turn on the stove.');
+    else if (gInventory.includes('scrapple')) addLine('The package smells faintly of cornmeal and sage through the waxed paper.');
+    else                      addLine("There's no scrapple here right now.");
+    return;
+  }
+  if (/stove|pan|skillet|burner/.test(target)) {
+    if (scrappleInPan && stoveOn && !scrappleCooked) addLine('An incredible smell. Sage, pork fat, hot cast iron. Classic.');
+    else if (scrappleCooked) addLine('Cooked scrapple and hot cast iron. That smell means breakfast.');
+    else if (stoveOn)        addLine('A faint gas smell and hot metal. The burner is on.');
+    else                     addLine('Old cast iron. Seasoning built up over years. A faint ghost of everything ever cooked in it.');
+    return;
+  }
+  if (/sofa|couch|quilt|blanket/.test(target)) {
+    addLine('The sofa smells like a sofa. Familiar.');
+    return;
+  }
+  if (/mug|cup/.test(target)) {
+    addLine(mugFilled ? 'Coffee. Slightly stale, but it works.' : 'Nothing. The mug is empty.');
+    return;
+  }
+  addLine('Nothing remarkable.');
+}
+
+function gameTouch(args) {
+  if (!args.length) { addLine('Touch what?'); return; }
+  const word = args.join(' ');
+  if (/sofa|couch/.test(word))          { addLine('Soft. Worn in the right places.'); return; }
+  if (/quilt|blanket|throw/.test(word)) { addLine('Soft from years of washing.'); return; }
+  if (/tv|television|screen/.test(word)){ addLine(tvOn ? 'The screen is warm to the touch.' : 'The screen is cold. The TV is off.'); return; }
+  if (/lamp/.test(word))                { addLine(lampOn ? 'The shade is warm.' : 'The shade is cool. The lamp is off.'); return; }
+  if (/desk/.test(word))                { addLine('Cool metal. A few scratches.'); return; }
+  if (/window/.test(word))              { addLine('Cool. A little drafty at the edge.'); return; }
+  if (/record|vinyl/.test(word)) {
+    if (recordPlaying && gInventory.some(id => ITEMS.find(i => i.id === id)?.label === recordPlaying))
+      addLine("It's spinning. Don't touch the surface.");
+    else addLine('Smooth vinyl and a paper sleeve.');
+    return;
+  }
+  if (/cassette|tape/.test(word))       { addLine('Plastic housing, a little brittle. The tape hisses inside.'); return; }
+  if (/book|paperback|textbook/.test(word)) { addLine('Bent spines. Some pages soft from being turned so many times.'); return; }
+  if (/boombox|boom box|stereo/.test(word)) { addLine('Plastic and metal. The buttons click satisfyingly.'); return; }
+  if (/computer|pc|windows|monitor|keyboard|dos/.test(word)) { addLine('The keyboard has that specific resistance. The monitor radiates a faint warmth.'); return; }
+  if (/phone|telephone|receiver/.test(word)) { addLine('Cool plastic. The cord is twisted into a knot near the base.'); return; }
+  if (/answering machine|machine/.test(word)) { addLine(`Plastic. The play button has a worn spot in the center.${messageHeard ? '' : ' The light pulses under your finger.'}`); return; }
+  if (/floppy|disk/.test(word))       { addLine('Smooth plastic. A little warm from being in your pocket.'); return; }
+  if (/cat|cracker|kitty/.test(word)) { addLine(seated ? 'Warm and soft. She shifts slightly but stays asleep.' : 'You give her a gentle pet. Warm fur, slow breathing. She doesn\'t wake up.'); return; }
+  if (/stove|burner|range/.test(word)) { addLine(stoveOn ? 'Hot. You pull your hand back.' : 'Cool metal. The knob feels well-used.'); return; }
+  if (/pan|skillet|cast iron/.test(word)) { addLine((stoveOn || scrappleCooked) ? 'Very hot. Not touching that.' : 'Smooth, heavy cast iron. Decades of seasoning.'); return; }
+  if (/knife/.test(word))              { addLine('A solid wooden handle. The blade is sharp — careful.'); return; }
+  if (/scrapple/.test(word)) {
+    if (scrappleCooked)     { addLine('Crispy at the edges. Still warm. Eat it.'); return; }
+    if (scrappleInPan)      { addLine(stoveOn ? 'You\'d burn your fingers. Let it cook.' : 'Cold and raw. Turn on the stove.'); return; }
+    if (gInventory.includes('scrapple')) { addLine('Dense and cold through the waxed paper.'); return; }
+    addLine("You don't have any scrapple."); return;
+  }
+  if (/beer|bottle/.test(word))         { addLine(gInventory.some(id => ITEMS.find(i=>i.id===id)?.drinkable) ? 'Ice cold.' : "You're not holding a beer."); return; }
+  if (/mug|cup/.test(word))             { addLine(mugFilled ? 'Still a little warm.' : 'Cold ceramic.'); return; }
+  const sc = findScenery(word);
+  if (sc) { addLine('It feels like what it is.'); return; }
+  const it = gameItem(word);
+  if (it && !it.hidden) { addLine('Feels ordinary.'); return; }
+  addLine("You can't reach that.");
+}
+
+function gameUse(args) {
+  if (!args.length) { addLine('Use what?'); return; }
+  const word = args.join(' ');
+  if (/lamp/.test(word))                  { addLine(`Try:  turn ${lampOn ? 'off' : 'on'} lamp`); return; }
+  if (/tv|television/.test(word))         { addLine(`Try:  turn ${tvOn ? 'off' : 'on'} tv`); return; }
+  if (/boombox|boom box|stereo/.test(word)){ addLine(`Try:  turn ${boomBoxOn ? 'off' : 'on'} boombox`); return; }
+  if (/turntable|player/.test(word))      { addLine('Try:  play <record name>'); return; }
+  if (/cassette|tape/.test(word))         { addLine('Try:  play <cassette name>'); return; }
+  if (/mug|cup/.test(word))               { addLine(mugFilled ? 'Try:  drink' : 'Try:  fill mug'); return; }
+  if (/coffee|pot/.test(word))            { addLine('Try:  fill mug'); return; }
+  if (/cabinet|cupboard/.test(word))      { addLine(cabinetOpen ? 'The cabinet is open.' : 'Try:  open cabinet'); return; }
+  if (/fridge|refrigerator/.test(word))   { addLine(fridgeOpen ? 'The fridge is open.' : 'Try:  open fridge'); return; }
+  if (/beer/.test(word))                  { addLine(fridgeOpen ? 'Try:  take beer' : 'Try:  open fridge'); return; }
+  if (/letter|note|flyer|book/.test(word)){ addLine('Try:  read <item>'); return; }
+  if (/computer|pc|windows|dos/.test(word)) {
+    addLine(floppyInserted ? 'Try:  read floppy' : 'Try:  insert floppy'); return;
+  }
+  if (/floppy|disk/.test(word)) {
+    if (!gInventory.includes('floppy') && !floppyInserted) { addLine('Try:  open drawer, take floppy'); return; }
+    addLine(floppyInserted ? 'Try:  read floppy  or  eject floppy' : 'Try:  insert floppy'); return;
+  }
+  if (/kitchen drawer|knife drawer/.test(word)) { addLine(kitchenDrawerOpen ? 'Try:  take knife' : 'Try:  open kitchen drawer'); return; }
+  if (/drawer/.test(word))                { addLine(drawerOpen ? 'Try:  take floppy' : 'Try:  open drawer'); return; }
+  if (/stove|range|burner/.test(word))    { addLine(stoveOn ? 'Try:  turn off stove' : 'Try:  turn on stove'); return; }
+  if (/pan|skillet/.test(word)) {
+    if (scrappleCooked)    { addLine('Try:  eat scrapple'); return; }
+    if (scrappleInPan)     { addLine(stoveOn ? 'Try:  cook scrapple' : 'Try:  turn on stove'); return; }
+    addLine('Try:  put scrapple in pan'); return;
+  }
+  if (/knife/.test(word)) {
+    if (!gInventory.includes('knife')) { addLine('Try:  open kitchen drawer, take knife'); return; }
+    addLine('Try:  put scrapple in pan'); return;
+  }
+  if (/scrapple/.test(word)) {
+    if (scrappleCooked) { addLine('Try:  eat scrapple'); return; }
+    if (scrappleInPan)  { addLine(stoveOn ? 'Try:  cook' : 'Try:  turn on stove'); return; }
+    if (!gInventory.includes('scrapple')) { addLine('Try:  open fridge, take scrapple'); return; }
+    addLine('Try:  put scrapple in pan  (you\'ll need the knife first)'); return;
+  }
+  if (/phone|telephone|receiver/.test(word)) { addLine('Try:  pick up phone'); return; }
+  if (/answering|machine|message|voicemail/.test(word)) { addLine('Try:  play messages'); return; }
+  if (/door/.test(word))                  { addLine("You're not going anywhere right now."); return; }
+  addLine('Try a more specific command.');
+}
+
+function gamePutInPan(args) {
+  // "put scrapple in pan" / "add scrapple to pan" / "slice scrapple"
+  if (scrappleInPan)  { addLine("The scrapple is already in the pan."); return; }
+  if (scrappleCooked) { addLine("The scrapple is cooked. Eat it."); return; }
+  if (!gInventory.includes('scrapple')) {
+    addLine("You don't have any scrapple. Try the fridge.");
+    return;
+  }
+  if (!gInventory.includes('knife')) {
+    addLine("You'll need a knife to slice it. There might be one in the kitchen drawer.");
+    return;
+  }
+  gInventory = gInventory.filter(id => id !== 'scrapple');
+  const sc = ITEMS.find(i => i.id === 'scrapple');
+  sc.inFridge = false;
+  sc.hidden   = true;   // absorbed into pan state — tracked via scrappleInPan
+  scrappleInPan = true;
+  addLine('You unwrap the scrapple and slice it into the pan with the knife.');
+  addLine('Gray-brown rounds, about a half-inch thick. Ready to cook.');
+  if (stoveOn) {
+    addLine('');
+    addLine('The scrapple hits the hot pan with a loud sizzle. Smells incredible already.');
+  } else {
+    addLine('Turn on the stove when you\'re ready.');
+  }
+}
+
+function gameCook(args) {
+  const word = (args || []).join(' ');
+  if (word && !/^(scrapple|breakfast|it|some scrapple|the scrapple)$/.test(word)) {
+    addLine("Cook what?"); return;
+  }
+  if (!scrappleInPan) {
+    if (gInventory.includes('scrapple'))
+      addLine("Slice the scrapple into the pan first.  (try: put scrapple in pan)");
+    else
+      addLine("You need some scrapple. Check the fridge.");
+    return;
+  }
+  if (scrappleCooked) { addLine("It's already done. Eat it before it gets cold."); return; }
+  if (!stoveOn) {
+    addLine("The stove is off. Turn it on first.");
+    return;
+  }
+  scrappleCooked = true;
+  addLine('The scrapple sizzles and crisps up. You flip the pieces with the knife.');
+  addLine('Edges go golden-brown. The kitchen smells like Saturday morning.');
+  addLine('');
+  addLine('Breakfast is ready.', 'dim');
+}
+
+function gameEat(args) {
+  const word = (args || []).join(' ');
+  if (!word || /^(scrapple|breakfast|it|the scrapple|some scrapple)$/.test(word)) {
+    if (scrappleCooked) {
+      scrappleCooked = false;
+      scrappleInPan  = false;
+      stoveOn        = false;
+      addLine('You eat the scrapple straight from the pan.');
+      addLine('Crispy, savory, a little greasy. Sage and cornmeal. That\'s breakfast.');
+      addLine('You feel like a person again.');
+      addLine('');
+      addLine('The burner clicks off.', 'dim');
+      return;
+    }
+    if (scrappleInPan && stoveOn)  { addLine("It's still cooking. Give it a minute.  (try: cook)"); return; }
+    if (scrappleInPan)             { addLine("The scrapple is in the pan but the stove is off. Turn it on first."); return; }
+    if (gInventory.includes('scrapple')) { addLine("It's still raw. Slice it into the pan and cook it first."); return; }
+    addLine("There's nothing to eat.");
+    return;
+  }
+  addLine("You can't eat that.");
+}
+
+function gameClose(args) {
+  if (!args.length) { addLine('Close what?'); return; }
+  // Strip leading articles
+  while (args.length && (args[0] === 'the' || args[0] === 'a')) args = args.slice(1);
+  const word = args.join(' ');
+  if (/cabinet|cupboard/.test(word)) {
+    if (!cabinetOpen) { addLine("It's already closed."); return; }
+    cabinetOpen = false; addLine('You close the cabinet.'); return;
+  }
+  if (/fridge|refrigerator|icebox/.test(word)) {
+    if (!fridgeOpen) { addLine("It's already closed."); return; }
+    fridgeOpen = false; addLine('You close the fridge.'); return;
+  }
+  if (/kitchen drawer|knife drawer|drawer by|silverware|utensil/.test(word)) {
+    if (!kitchenDrawerOpen) { addLine("It's already closed."); return; }
+    kitchenDrawerOpen = false; addLine('You slide the kitchen drawer shut.'); return;
+  }
+  if (/^drawer/.test(word)) {
+    if (!drawerOpen) { addLine("It's already closed."); return; }
+    drawerOpen = false; addLine('You slide the drawer shut.'); return;
+  }
+  if (/door/.test(word)) { addLine("It's already closed."); return; }
+  addLine("You can't close that.");
+}
+
+function gameStop(args) {
+  const target = (args || []).join(' ');
+  const isTurntable = /record|turntable|needle|vinyl/.test(target);
+  const isBoombox   = /boombox|boom box|cassette|tape|stereo/.test(target);
+  const isGeneric   = !target || /music|playing|sound/.test(target);
+
+  if (isTurntable || (isGeneric && recordPlaying && !cassettePlaying)) {
+    if (!recordPlaying) { addLine("The turntable isn't playing."); return; }
+    const was = recordPlaying; recordPlaying = null;
+    addLine(`You lift the needle. ${was} stops.`);
+    return;
+  }
+  if (isBoombox || (isGeneric && cassettePlaying && !recordPlaying)) {
+    if (!cassettePlaying) { addLine("The boombox isn't playing anything."); return; }
+    const was = cassettePlaying; cassettePlaying = null;
+    addLine(`You stop the boombox. ${was} winds down.`);
+    return;
+  }
+  if (isGeneric && recordPlaying && cassettePlaying) {
+    recordPlaying = null; cassettePlaying = null;
+    addLine('You lift the needle and stop the boombox. Silence.');
+    return;
+  }
+  if (isGeneric) { addLine("Nothing is playing."); return; }
+  addLine('Stop what?');
+}
+
+function gameHelp() {
+  const lines = [
+    'Commands:',
+    '',
+    '  look  (l)              — describe the room',
+    '  examine <item>  (x)    — look closely  (also: inspect, look at, check)',
+    '  take <item>            — pick something up  (also: get, grab)',
+    '  drop <item>            — put something down (also: put, place, set)',
+    '  read <item>            — read something',
+    '  play <record>          — put a record on the turntable',
+    '  stop                   — lift the needle',
+    '  open <item>            — open something  (cabinet, drawer)',
+    '  close <item>           — close something (cabinet, drawer)',
+    '  insert floppy          — put the disk in the drive',
+    '  eject floppy           — remove the disk from the drive',
+    '  play messages          — play the answering machine',
+    '  turn on/off <item>     — toggle lamp or tv',
+    '  watch                  — watch the tv',
+    '  listen                 — listen to the room, a record, the tv...',
+    '  fill mug               — fill your mug from the coffee pot',
+    '  drink                  — drink from your mug',
+    '  open kitchen drawer    — open the kitchen drawer (has a knife)',
+    '  put scrapple in pan    — slice scrapple into the pan (need knife)',
+    '  turn on stove          — light the burner',
+    '  cook                   — cook whatever is in the pan',
+    '  eat scrapple           — eat the cooked scrapple',
+    '  sit / sit on sofa      — sit on the sofa',
+    '  stand  (get up, rise)  — stand up',
+    '  go <place>             — move somewhere  (east, west, kitchen...)',
+    '  smell / touch <item>   — sensory commands',
+    '  use <item>             — hint at what to do with something',
+    '  wait  (z)              — wait a moment',
+    '  inventory  (i)         — list what you\'re carrying',
+    '  quit                   — return to the terminal',
+    '  help  (?)              — this message',
+  ];
+  for (const l of lines) addLine(l);
+}
+
+async function handleFloppyPass(val) {
+  // Echo "Password:" without revealing what was typed
+  addLine('Password:', 'dim');
+  inputEl.removeAttribute('data-mode');
+  awaitingFloppyPass = false;
+  promptEl.textContent = '> ';
+
+  const locked = CONFIG.FLOPPY_PASS_HASH
+                 && CONFIG.FLOPPY_PASS_HASH !== 'PASTE_YOUR_HASH_HERE'
+                 && CONFIG.FLOPPY_PASS_HASH !== 'DISABLED';
+  if (!locked) {
+    // No password configured — open it
+    floppyUnlocked = true;
+    gameRead(['floppy']);
+    return;
+  }
+
+  if (!val.trim()) {
+    addLine('');
+    addLine('Incorrect password.', 'dim');
+    addLine('');
+    return;
+  }
+
+  const hash = await sha256hex(val);
+  if (hash === CONFIG.FLOPPY_PASS_HASH) {
+    floppyUnlocked = true;
+    addLine('');
+    addLine('Access granted.', 'dim');
+    gameRead(['floppy']);
+  } else {
+    addLine('');
+    addLine('Incorrect password.', 'dim');
+    addLine('');
+  }
+}
+
+function handleGameCommand(raw) {
+  addLine('> ' + raw, 'hi');
+
+  const trimmed = raw.trim();
+  if (!trimmed) { addLine(''); promptEl.textContent = '> '; inputEl.value = ''; return; }
+
+  if (gHistory[gHistory.length - 1] !== trimmed) gHistory.push(trimmed);
+  gHistIdx = -1;
+
+  const tokens = trimmed.toLowerCase().split(/\s+/);
+  const cmd    = tokens[0];
+  const args   = tokens.slice(1);
+  const rest   = args.join(' ');
+
+  // ── Multi-word pattern dispatch ──────────────────────────────────────────
+  if      (cmd === 'look'  && args[0] === 'at')                         { gameExamine(args.slice(1)); }
+  else if (cmd === 'look'  && /^around/.test(rest))                     { gameLook(); }
+  else if (cmd === 'look'  && /^(out|outside|through)/.test(rest))      { gameExamine(['window']); }
+  else if (cmd === 'look'  && (args[0] === 'in' || args[0] === 'inside' || args[0] === 'into')) { gameExamine(args.slice(1)); }
+  else if (cmd === 'pick'  && args[0] === 'up')                         { gameTake(args.slice(1)); }
+  else if (cmd === 'put'   && args[0] === 'down')                       { gameDrop(args.slice(1)); }
+  else if (cmd === 'put'   && /on (the )?turntable/.test(rest))         { gamePlay(rest.replace(/\s*on (the )?turntable/, '').trim().split(' ')); }
+  else if (cmd === 'turn'  && args[0] === 'on')                         { gameToggle(args.slice(1), true); }
+  else if (cmd === 'turn'  && args[0] === 'off')                        { gameToggle(args.slice(1), false); }
+  else if (cmd === 'turn'  && args[args.length - 1] === 'on')           { gameToggle(args.slice(0, -1), true); }
+  else if (cmd === 'turn'  && args[args.length - 1] === 'off')          { gameToggle(args.slice(0, -1), false); }
+  else if (cmd === 'get'   && args[0] === 'up')                         { gameStand(); }
+  else if (cmd === 'stand' && args[0] === 'up')                         { gameStand(); }
+  else if (cmd === 'lie'   && /^(down|on)/.test(rest))                  { gameSit(args); }
+  else if (cmd === 'lay'   && /^(down|on)/.test(rest))                  { gameSit(args); }
+  else if (cmd === 'go'    && (args[0] === 'to' || args[0] === 'into' || args[0] === 'in')) { gameGo(args.slice(1)); }
+  else if (cmd === 'walk'  && (args[0] === 'to' || args[0] === 'into')) { gameGo(args.slice(1)); }
+  else if (cmd === 'head'  && (args[0] === 'to' || args[0] === 'towards')) { gameGo(args.slice(1)); }
+  else if (cmd === 'play'   && /message|messages|voicemail|tape/.test(rest)) { gamePlayMessage(); }
+  else if (cmd === 'check'  && /message|messages|voicemail|machine/.test(rest)) { gamePlayMessage(); }
+  else if (cmd === 'listen' && /message|messages|voicemail|machine/.test(rest)) { gamePlayMessage(); }
+  else if (cmd === 'press'  && /play/.test(rest))                       { gamePlayMessage(); }
+  else if (cmd === 'pick'   && /phone|up the phone/.test(rest))         { addLine('You pick up the receiver. Dial tone.'); }
+  else if (cmd === 'hang'   && /up/.test(rest))                         { addLine('You set the receiver back down.'); }
+  else if (cmd === 'insert' && /floppy|disk/.test(rest))                { gameInsertFloppy(); }
+  else if (cmd === 'eject'  && /floppy|disk/.test(rest))                { gameEjectFloppy(); }
+  else if (cmd === 'remove' && /floppy|disk/.test(rest))                { gameEjectFloppy(); }
+  else if (cmd === 'put'    && /floppy|disk/.test(rest) && /computer|drive|slot/.test(rest)) { gameInsertFloppy(); }
+  else if (cmd === 'dir'    && /floppy|disk/.test(rest))                { floppyInserted ? (addLine(''), addLine('A:\\'), addLine('  LETTER  TXT     2048  10-03-93  11:48p')) : addLine("There's no disk in the drive."); }
+  else if (cmd === 'type'   && /letter|txt/.test(rest))                 { gameRead(['letter.txt']); }
+  else if (cmd === 'listen' && args[0] === 'to')                        { gameListen(args.slice(1)); }
+  else if (cmd === 'stop'  && /record|music|player|turntable|needle/.test(rest)) { gameStop(args); }
+  else if (cmd === 'lift'  && /needle/.test(rest))                      { gameStop(['needle']); }
+  else if ((cmd === 'fill' || cmd === 'pour') && /mug|cup/.test(rest))  { gameFillMug(); }
+  else if (cmd === 'pour'  && /coffee/.test(rest))                      { gameFillMug(); }
+  else if (cmd === 'get'   && /coffee/.test(rest))                      { gameFillMug(); }
+  // ── Scrapple / cooking ───────────────────────────────────────────────────
+  else if ((cmd === 'put' || cmd === 'add' || cmd === 'place' || cmd === 'slice' || cmd === 'cut') &&
+           /scrapple/.test(rest) && /pan|stove|skillet/.test(rest))     { gamePutInPan([]); }
+  else if (cmd === 'slice' && /scrapple/.test(rest))                    { gamePutInPan([]); }
+  else if (cmd === 'cut'   && /scrapple/.test(rest))                    { gamePutInPan([]); }
+  else if (cmd === 'open'  && /kitchen drawer|knife drawer|drawer by|silverware|utensil/.test(rest)) { gameOpen(['kitchen drawer']); }
+  else if (cmd === 'close' && /kitchen drawer|knife drawer|drawer by|silverware|utensil/.test(rest)) { gameClose(['kitchen drawer']); }
+  else if (cmd === 'light' && /stove|burner|range|oven/.test(rest))     { gameToggle(['stove'], true); }
+  else if (cmd === 'ignite'&& /stove|burner|range/.test(rest))          { gameToggle(['stove'], true); }
+  else if (cmd === 'fry'   && /scrapple|breakfast|it/.test(rest))       { gameCook(['scrapple']); }
+  else if (cmd === 'fry'   && !rest)                                     { gameCook([]); }
+  else if (cmd === 'watch' && /tv|television|set|show|hogan|screen/.test(rest)) { gameWatch(args); }
+  else {
+    switch (cmd) {
+      // ── Looking & examining ──────────────────────────────────────────────
+      case 'look': case 'l':
+      case 'describe':                                  gameLook();           break;
+      case 'examine': case 'x': case 'inspect':
+      case 'check':                                     gameExamine(args);    break;
+
+      // ── Taking & dropping ────────────────────────────────────────────────
+      case 'take': case 'get': case 'grab':
+      case 'pick': case 'snag':                         gameTake(args);       break;
+      case 'drop': case 'put': case 'place':
+      case 'set': case 'leave':                         gameDrop(args);       break;
+
+      // ── Reading ──────────────────────────────────────────────────────────
+      case 'read':                                      gameRead(args);       break;
+
+      // ── Opening & closing ────────────────────────────────────────────────
+      case 'open':                                      gameOpen(args);       break;
+      case 'close': case 'shut':                        gameClose(args);      break;
+
+      // ── Phone & answering machine ────────────────────────────────────────
+      case 'message': case 'messages': case 'voicemail': gamePlayMessage();   break;
+
+      // ── Floppy ───────────────────────────────────────────────────────────
+      case 'insert': case 'load':                       gameInsertFloppy();   break;
+      case 'eject':  case 'remove':                     gameEjectFloppy();    break;
+
+      // ── Records ──────────────────────────────────────────────────────────
+      case 'play':                                      gamePlay(args);       break;
+      case 'stop':                                      gameStop(args);       break;
+
+      // ── Sitting & standing ───────────────────────────────────────────────
+      case 'sit':                                       gameSit(args);        break;
+      case 'stand': case 'rise':                        gameStand();          break;
+
+      // ── Movement ─────────────────────────────────────────────────────────
+      case 'go': case 'walk': case 'move':
+      case 'enter': case 'head': case 'travel':         gameGo(args);         break;
+      case 'north': case 'n':                           gameGo(['north']);     break;
+      case 'south': case 's':                           gameGo(['south']);     break;
+      case 'east':  case 'e':                           gameGo(['east']);      break;
+      case 'west':  case 'w':                           gameGo(['west']);      break;
+
+      // ── Senses ───────────────────────────────────────────────────────────
+      case 'watch':                                     gameWatch(args);       break;
+      case 'listen': case 'hear':                       gameListen(args);      break;
+      case 'smell': case 'sniff':                       gameSmell(args);       break;
+      case 'touch': case 'feel': case 'rub':
+      case 'tap': case 'pet':                           gameTouch(args);       break;
+
+      // ── Coffee ───────────────────────────────────────────────────────────
+      case 'fill': case 'pour':                         gameFillMug();         break;
+      case 'drink': case 'sip':                         gameDrink(args);       break;
+
+      // ── Cooking ──────────────────────────────────────────────────────────
+      case 'cook': case 'fry':                          gameCook(args);        break;
+      case 'eat':  case 'consume':                      gameEat(args);         break;
+
+      // ── Utility ──────────────────────────────────────────────────────────
+      case 'use':                                       gameUse(args);         break;
+      case 'inventory': case 'i': case 'inv':
+      case 'items': case 'carrying':                    gameInventory();       break;
+      case 'wait': case 'z':                            addLine('Time passes.'); break;
+      case 'turn':                                      addLine('Turn what on or off?'); break;
+
+      // ── Physics ──────────────────────────────────────────────────────────
+      case 'push': case 'shove':                        addLine("That doesn't budge."); break;
+      case 'pull':                                      addLine('You give it a tug. Nothing moves.'); break;
+
+      // ── Flavor ───────────────────────────────────────────────────────────
+      case 'sleep': case 'nap':                         addLine("You're not tired enough for that."); break;
+      case 'think':                                     addLine('Your mind wanders.'); break;
+      case 'dance':                                     addLine('You shuffle in place for a moment.'); break;
+      case 'yell': case 'shout': case 'scream':         addLine('Your voice echoes off the walls.'); break;
+      case 'sing':
+        addLine(recordPlaying ? `You hum along with ${recordPlaying}.` : 'You hum to yourself.');
+        break;
+      case 'wave':                                      addLine('You wave at nobody in particular.'); break;
+      case 'score':                                     addLine('There is no score. Just the room.'); break;
+      case 'about': case 'credits': case 'info':        addLine('A living room. Philadelphia, 1993.'); break;
+      case 'xyzzy': case 'plugh':                       addLine('Nothing happens.'); break;
+
+      // ── Help & quit ──────────────────────────────────────────────────────
+      case 'help': case '?':                            gameHelp();            break;
+      case 'quit': case 'exit': case 'bye':
+        addLine('');
+        addLine('You leave the living room.', 'dim');
+        addLine('──────────────────────────────────────────────────────────────────', 'dim');
+        addLine('');
+        state = 'shell';
+        showPrompt();
+        return;
+      default:
+        addLine("That doesn't seem to do anything.", 'dim');
+    }
+  }
+
+  // Nudge to eject once after reading, on the next non-eject command
+  if (floppyRead && floppyInserted && !ejectNudged && cmd !== 'eject') {
+    ejectNudged = true;
+    addLine('( the disk is still in the drive — eject floppy when you\'re ready )', 'dim');
+  }
+
+  addLine('');
+  promptEl.textContent = '> ';
+  inputEl.value = '';
+}
+
+// ── Input event handler ────────────────────────────────────────────────────
+inputEl.addEventListener('keydown', async (e) => {
+  // ── Pager ────────────────────────────────────────────────────────────────
+  if (state === 'more') {
+    if (e.key === ' ' || e.key === 'Enter' || e.key === 'q') {
+      e.preventDefault();
+      if (e.key === 'q') {
+        moreBuf = [];
+        const lines = outputEl.querySelectorAll('.line');
+        if (lines.length) lines[lines.length - 1].remove();
+        addLine('');
+        state = prevState;
+        if (state === 'shell') showPrompt();
+        else { promptEl.textContent = '> '; inputEl.value = ''; }
+      } else {
+        const lines = outputEl.querySelectorAll('.line');
+        if (lines.length) lines[lines.length - 1].remove();
+        outputMore();
+        if (state !== 'more') {
+          addLine('');
+          if (prevState === 'shell') showPrompt();
+          else { promptEl.textContent = '> '; inputEl.value = ''; }
+        }
+      }
+    }
+    return;
+  }
+
+  // ── Enter ────────────────────────────────────────────────────────────────
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const val = inputEl.value;
+    inputEl.value = '';
+    if      (state === 'shell')                      handleCommand(val);
+    else if (state === 'game' && awaitingFloppyPass) await handleFloppyPass(val);
+    else if (state === 'game')                       handleGameCommand(val);
+    return;
+  }
+
+  // ── Shell shortcuts ───────────────────────────────────────────────────────
+  if (state === 'shell' || state === 'game') {
+    const hist  = state === 'shell' ? history  : gHistory;
+    const getHI = state === 'shell' ? () => histIdx  : () => gHistIdx;
+    const setHI = state === 'shell' ? v => { histIdx  = v; } : v => { gHistIdx = v; };
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!hist.length) return;
+      const cur = getHI();
+      const next = cur === -1 ? hist.length - 1 : Math.max(0, cur - 1);
+      setHI(next);
+      inputEl.value = hist[next];
+      inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
+
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const cur = getHI();
+      if (cur === -1) return;
+      const next = cur + 1;
+      if (next >= hist.length) { setHI(-1); inputEl.value = ''; }
+      else { setHI(next); inputEl.value = hist[next]; }
+      inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
+
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      if (state === 'shell') tabComplete();
+
+    } else if (e.key === 'l' && e.ctrlKey) {
+      e.preventDefault();
+      clearOutput();
+      if (state === 'shell') showPrompt();
+      else { promptEl.textContent = '> '; inputEl.value = ''; }
+
+    } else if (e.key === 'c' && e.ctrlKey) {
+      e.preventDefault();
+      const pfx = state === 'shell' ? promptEl.textContent : '> ';
+      addLine(pfx + inputEl.value + '^C', 'dim');
+      inputEl.value = '';
+      if (state === 'shell') showPrompt();
+      else { promptEl.textContent = '> '; }
+    }
+  }
+});
+
+// ── Tab completion (shell only) ────────────────────────────────────────────
+function tabComplete() {
+  const val    = inputEl.value;
+  const tokens = val.split(/\s+/);
+
+  // Complete first token as a path only if it looks like one
+  const isFirstToken = tokens.length === 1;
+  const partial = tokens[tokens.length - 1];
+
+  const hasSlash  = partial.includes('/');
+  const dirPart   = hasSlash ? partial.slice(0, partial.lastIndexOf('/') + 1) : '';
+  const stem      = hasSlash ? partial.slice(partial.lastIndexOf('/') + 1)    : partial;
+  const lookupDir = hasSlash ? resolvePath(dirPart.replace(/\/$/, '') || '/')  : cwd;
+
+  const matches = children(lookupDir, true)
+    .map(k => k.split('/').pop())
+    .filter(n => n.startsWith(stem));
+
+  if (matches.length === 0) return;
+
+  if (matches.length === 1) {
+    const completed = dirPart + matches[0];
+    const resolvedFull = resolvePath(completed);
+    const trailingSlash = FS[resolvedFull]?.type === 'dir' ? '/' : '';
+    tokens[tokens.length - 1] = completed + trailingSlash;
+    inputEl.value = tokens.join(' ');
+    inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
+  } else {
+    addLine(promptEl.textContent + val, 'hi');
+    addLine(matches.join('  '));
+  }
+}
+
+// ── Misc ───────────────────────────────────────────────────────────────────
+window.addEventListener('resize', updatePanel);
+document.addEventListener('click', () => { if (state !== 'boot') inputEl.focus(); });
+
+updatePanel();
+boot();
+</script>
+</body>
+</html>
