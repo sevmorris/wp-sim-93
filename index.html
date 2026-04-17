@@ -930,7 +930,7 @@ function cwdDisplay() {
 function updatePanel() {
   panelEl.innerHTML =
     `<span>────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>\n` +
-    `<span><span class="norm">  Buckingham Sim 93</span></span>\n` +
+    `<span><span class="norm">  Buckingham Sim 93  BETA</span></span>\n` +
     `<span>────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>`;
 }
 
@@ -2133,37 +2133,16 @@ function gameHelp() {
   const lines = [
     'Commands:',
     '',
-    '  look  (l)              — describe the room',
-    '  examine <item>  (x)    — look closely  (also: inspect, look at, check)',
-    '  take <item>            — pick something up  (also: get, grab)',
-    '  drop <item>            — put something down (also: put, place, set)',
-    '  read <item>            — read something',
-    '  play <record>          — put a record on the turntable',
-    '  stop                   — lift the needle',
-    '  open <item>            — open something  (cabinet, drawer)',
-    '  close <item>           — close something (cabinet, drawer)',
-    '  insert floppy          — put the disk in the drive',
-    '  eject floppy           — remove the disk from the drive',
-    '  play messages          — play the answering machine',
-    '  turn on/off <item>     — toggle lamp or tv',
-    '  watch                  — watch the tv',
-    '  listen                 — listen to the room, a record, the tv...',
-    '  fill mug               — fill your mug from the coffee pot',
-    '  drink                  — drink from your mug',
-    '  open kitchen drawer    — open the kitchen drawer (has a knife)',
-    '  put scrapple in pan    — slice scrapple into the pan (need knife)',
-    '  turn on stove          — light the burner',
-    '  cook                   — cook whatever is in the pan',
-    '  eat scrapple           — eat the cooked scrapple',
-    '  sit / sit on sofa      — sit on the sofa',
-    '  stand  (get up, rise)  — stand up',
-    '  go <place>             — move somewhere  (east, west, kitchen...)',
-    '  smell / touch <item>   — sensory commands',
-    '  use <item>             — hint at what to do with something',
-    '  wait  (z)              — wait a moment',
-    '  inventory  (i)         — list what you\'re carrying',
-    '  quit                   — return to the terminal',
-    '  help  (?)              — this message',
+    '  look  (l)           — describe the room',
+    '  examine <thing>     — look closely at something',
+    '  take / drop <item>  — pick up or put down',
+    '  read <item>         — read something',
+    '  open / close        — doors, drawers, the fridge',
+    '  go <direction>      — move around',
+    '  inventory  (i)      — what you\'re carrying',
+    '  wait  (z)           — pass a moment',
+    '  quit                — return to the terminal',
+    '  help  (?)           — this message',
   ];
   for (const l of lines) addLine(l);
 }
@@ -2350,6 +2329,44 @@ function handleGameCommand(raw) {
       case 'score':                                     addLine('There is no score. Just the room.'); break;
       case 'about': case 'credits': case 'info':        addLine('A living room. Philadelphia, 1993.'); break;
       case 'xyzzy': case 'plugh':                       addLine('Nothing happens.'); break;
+
+      // ── Nonsense & chaos ─────────────────────────────────────────────────
+      case 'fart':
+        addLine(seated ? 'You let one go into the sofa cushion. Cracker opens one eye.' : 'You rip one. The room is unimpressed.');
+        break;
+      case 'die': case 'kill': case 'murder':
+        addLine('This is not that kind of game. You are fine.');
+        break;
+      case 'kill yourself': case 'kys':
+        addLine('How about no. Make some scrapple instead.');
+        break;
+      case 'sex': case 'fuck': case 'hump':
+        addLine("There's nobody here but you and a sleeping cat. Have some dignity.");
+        break;
+      case 'pee': case 'piss': case 'urinate':
+        addLine('The bathroom is not modeled. You hold it.');
+        break;
+      case 'poop': case 'shit': case 'defecate':
+        addLine('Absolutely not.');
+        break;
+      case 'eat cat': case 'eat cracker':
+        addLine('Cracker shifts in her sleep, instinctively aware of your depravity.');
+        break;
+      case 'pet cat': case 'pet cracker':
+        addLine('You give her a scratch behind the ear. She doesn\'t wake up but purrs louder.');
+        break;
+      case 'sudo':
+        addLine('This is not a computer. Well — it is, but not that kind.');
+        break;
+      case 'hack':
+        addLine('You stare at the monitor. The monitor stares back.');
+        break;
+      case 'flip table': case 'flip':
+        addLine('You grab the edge of the desk, reconsider, and let go.');
+        break;
+      case 'panic':
+        addLine('You take a breath. The rain helps.');
+        break;
 
       // ── Help & quit ──────────────────────────────────────────────────────
       case 'help': case '?':                            gameHelp();            break;
