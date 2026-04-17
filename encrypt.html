@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Floppy Letter — Encrypt</title>
+  <style>
+    body { font-family: monospace; background: #111; color: #ccc; padding: 2rem; max-width: 700px; }
+    h1   { color: #fff; font-size: 1.1rem; margin-bottom: 1.5rem; }
+    label { display: block; color: #aaa; margin-bottom: 0.3rem; }
+    input, textarea { width: 100%; background: #222; border: 1px solid #444; color: #fff;
+                      font-family: monospace; font-size: 0.95rem; padding: 0.5rem;
+                      box-sizing: border-box; margin-bottom: 1.2rem; }
+    textarea { height: 220px; resize: vertical; }
+    button   { background: #33ff33; color: #000; border: none; padding: 0.5rem 1.2rem;
+                font-family: monospace; font-size: 1rem; cursor: pointer; }
+    button:hover { background: #55ff55; }
+    #result { margin-top: 1.5rem; }
+    #cipher { background: #1a1a1a; border: 1px solid #444; color: #33ff33;
+              font-family: monospace; font-size: 0.8rem; padding: 0.8rem;
+              word-break: break-all; white-space: pre-wrap; display: none; }
+    .note   { color: #666; font-size: 0.85rem; margin-top: 0.5rem; }
+    .error  { color: #ff4444; margin-top: 0.8rem; }
+  </style>
+</head>
+<body>
+  <h1>Floppy Letter 2601 — Encrypt Tool</h1>
+
+  <label for="pass">Password</label>
+  <input type="password" id="pass" placeholder="Enter the floppy password">
+
+  <label for="letter">Letter text</label>
+  <textarea id="letter" placeholder="Dear Joe,&#10;&#10;Your letter here..."></textarea>
+
+  <button onclick="encrypt()">Encrypt</button>
+
+  <div id="result">
+    <div id="cipher"></div>
+    <p class="note" id="note" style="display:none">
+      Copy everything above and paste it into <code>CONFIG.FLOPPY_CIPHER</code> in index.html.
+    </p>
+    <p class="error" id="err"></p>
+  </div>
+
+  <script>
+  async function encrypt() {
+    const pass   = document.getElementById('pass').value;
+    const letter = document.getElementById('letter').value;
+    const cipherEl = document.getElementById('cipher');
+    const noteEl   = document.getElementById('note');
+    const errEl    = document.getElementById('err');
+
+    cipherEl.style.display = 'none';
+    noteEl.style.display   = 'none';
+    errEl.textContent      = '';
+
+    if (!pass)   { errEl.textContent = 'Enter a password.';    return; }
+    if (!letter) { errEl.textContent = 'Enter letter text.';   return; }
+
+    try {
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const iv   = crypto.getRandomValues(new Uint8Array(12));
+
+      const keyMaterial = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']
+      );
+      const key = await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt']
+      );
+
+      const ct   = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(letter));
+      const blob = new Uint8Array(16 + 12 + ct.byteLength);
+      blob.set(salt, 0);
+      blob.set(iv,   16);
+      blob.set(new Uint8Array(ct), 28);
+
+      const b64 = btoa(String.fromCharCode(...blob));
+      cipherEl.textContent   = b64;
+      cipherEl.style.display = 'block';
+      noteEl.style.display   = 'block';
+    } catch (e) {
+      errEl.textContent = 'Encryption failed: ' + e.message;
+    }
+  }
+  </script>
+</body>
+</html>

@@ -122,6 +122,9 @@
     /* ── Mobile notice ──────────────────────────────────────────────────────── */
     @media (max-width: 600px) {
       html, body { font-size: 15px; }
+      #output     { padding: 6px 8px 4px; }
+      #input-row  { padding: 4px 8px 6px; }
+      #panel      { padding: 4px 6px; }
     }
   </style>
 </head>
@@ -143,22 +146,20 @@
    CONFIGURATION
    ════════════════════════════════════════════════════════════════════════════
 
-   FLOPPY PASSWORD
-   ───────────────
-   To protect the in-game floppy letter with a password, paste a SHA-256 hash
-   into FLOPPY_PASS_HASH.  Generate one in any browser console:
+   FLOPPY LETTER (encrypted)
+   ─────────────────────────
+   The letter on the floppy is AES-GCM encrypted — ciphertext only in the
+   source, never plaintext.  To generate a new cipher blob, open encrypt.html
+   in a browser, enter your password and letter text, and paste the result
+   into FLOPPY_CIPHER below.
 
-     async function h(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
-     h('your-password-here').then(console.log)
-
-   Set to 'DISABLED' to require no password.
+   Set to 'DISABLED' to skip the password and show no letter content.
 */
 const CONFIG = {
   LOGIN_USER: 'joe',
 
-  /* Floppy disk password — protects the in-game letter.txt
-     Set to 'DISABLED' to require no password. */
-  FLOPPY_PASS_HASH: 'a3138f5d5cd7d942b89e39613726f39f1c1706045a31e037c1370784dabebe7d',   // ← replace with your SHA-256 hash
+  /* Encrypted floppy letter — generate with encrypt.html */
+  FLOPPY_CIPHER: 'PASTE_YOUR_CIPHER_HERE',
 
   /* System flavour */
   HOSTNAME:  'owl.temple.edu',
@@ -383,13 +384,7 @@ Type  buckingham  to play.
      content   : the full text shown when they  read  it
 */
 const ROOM_DESC =
-`A small living room. A metal desk sits against the west wall — a PC on it,
-monitor glowing blue-gray, an old lamp from Second Mile Thrift Store beside it.
-In the northwest corner, a small table holds a phone and an answering machine.
-Records and a turntable line the south wall. An old sofa sits in the middle of the
-room, facing the television — a cat curled up on one end.
-Books, cassettes, and a boombox crowd the shelves along the north wall.
-The kitchen is open to the east. Rain against the window.`;
+`A small living room. A metal desk sits against the west wall — a PC on it, monitor glowing blue-gray, an old lamp from Second Mile Thrift Store beside it. In the northwest corner, a small table holds a phone and an answering machine. Records and a turntable line the south wall. An old sofa sits in the middle of the room, facing the television — a cat curled up on one end. Books, cassettes, and a boombox crowd the shelves along the north wall. The kitchen is open to the east. Rain against the window.`;
 
 const ITEMS = [
 
@@ -441,11 +436,6 @@ $4 cover`
       if (floppyRead)     return 'A 3.5" floppy disk. "Floppy Letter 2601". You\'ve read it.';
       return 'A 3.5" floppy disk. Handwritten label in blue marker: "Floppy Letter 2601".';
     },
-    content:
-`Dear Joe,
-
-This is simply a placeholder for now. The real letter will be encrypted.
-`
   },
 
   // ── Kitchen items (inCabinet: true — visible only when cabinet is open) ───
@@ -853,8 +843,9 @@ let drawerOpen    = false;   // desk drawer state
 let floppyInserted = false;  // floppy disk is in the drive
 let messageHeard  = false;   // answering machine message has been played
 let floppyRead    = false;   // player has read the floppy letter
-let awaitingFloppyPass = false; // waiting for floppy password input
-let floppyUnlocked     = false; // floppy password has been accepted this session
+let awaitingFloppyPass    = false; // waiting for floppy password input
+let floppyUnlocked        = false; // floppy password has been accepted this session
+let floppyDecryptedContent = null; // decrypted letter text, cached after unlock
 let kitchenDrawerOpen = false; // kitchen drawer by the fridge
 let stoveOn           = false; // stove burner is lit
 let scrappleInPan     = false; // scrapple has been sliced into the pan
@@ -876,9 +867,27 @@ function addLine(text = '', cls = '') {
 function clearOutput() { outputEl.innerHTML = ''; }
 
 // ── SHA-256 via Web Crypto ─────────────────────────────────────────────────
-async function sha256hex(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+async function deriveKey(password, salt) {
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  );
+}
+
+async function decryptLetter(password, b64) {
+  const blob = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const salt  = blob.slice(0, 16);
+  const iv    = blob.slice(16, 28);
+  const ct    = blob.slice(28);
+  const key   = await deriveKey(password, salt);
+  const pt    = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  return new TextDecoder().decode(pt);
 }
 
 // ── Path helpers ───────────────────────────────────────────────────────────
@@ -1440,28 +1449,35 @@ function gameRead(args) {
         addLine("There's no disk in the drive.");
       return;
     }
-    // Password gate
-    const locked = CONFIG.FLOPPY_PASS_HASH && CONFIG.FLOPPY_PASS_HASH !== 'PASTE_YOUR_HASH_HERE'
-                   && CONFIG.FLOPPY_PASS_HASH !== 'DISABLED';
-    if (locked && !floppyUnlocked) {
+    // If already decrypted this session, show cached content
+    if (floppyUnlocked && floppyDecryptedContent) {
       addLine('');
-      addLine('This disk is password protected.', 'dim');
-      addLine('Enter password.', 'dim');
+      addLine('[ letter.txt — Floppy Letter 2601 ]', 'dim');
       addLine('');
-      awaitingFloppyPass = true;
-      promptEl.textContent = 'Password: ';
-      inputEl.setAttribute('data-mode', 'password');
+      for (const line of floppyDecryptedContent.split('\n')) addLine(line, 'white');
+      floppyRead = true;
+      ejectNudged = false;
+      addLine('');
+      addLine('( eject floppy when you\'re done )', 'dim');
       return;
     }
-    const fl = ITEMS.find(i => i.id === 'floppy');
+    // Password / cipher gate
+    const hasCipher = CONFIG.FLOPPY_CIPHER
+                      && CONFIG.FLOPPY_CIPHER !== 'PASTE_YOUR_CIPHER_HERE'
+                      && CONFIG.FLOPPY_CIPHER !== 'DISABLED';
+    if (!hasCipher) {
+      addLine('');
+      addLine('No letter found on this disk.', 'dim');
+      addLine('');
+      return;
+    }
     addLine('');
-    addLine('[ letter.txt — Floppy Letter 2601 ]', 'dim');
+    addLine('This disk is password protected.', 'dim');
+    addLine('Enter password.', 'dim');
     addLine('');
-    for (const line of fl.content.split('\n')) addLine(line, 'white');
-    floppyRead = true;
-    ejectNudged = false;
-    addLine('');
-    addLine('( eject floppy when you\'re done )', 'dim');
+    awaitingFloppyPass = true;
+    promptEl.textContent = 'Password: ';
+    inputEl.setAttribute('data-mode', 'password');
     return;
   }
 
@@ -2144,21 +2160,10 @@ function gameHelp() {
 }
 
 async function handleFloppyPass(val) {
-  // Echo "Password:" without revealing what was typed
   addLine('Password:', 'dim');
   inputEl.removeAttribute('data-mode');
   awaitingFloppyPass = false;
   promptEl.textContent = '> ';
-
-  const locked = CONFIG.FLOPPY_PASS_HASH
-                 && CONFIG.FLOPPY_PASS_HASH !== 'PASTE_YOUR_HASH_HERE'
-                 && CONFIG.FLOPPY_PASS_HASH !== 'DISABLED';
-  if (!locked) {
-    // No password configured — open it
-    floppyUnlocked = true;
-    gameRead(['floppy']);
-    return;
-  }
 
   if (!val.trim()) {
     addLine('');
@@ -2167,13 +2172,12 @@ async function handleFloppyPass(val) {
     return;
   }
 
-  const hash = await sha256hex(val);
-  if (hash === CONFIG.FLOPPY_PASS_HASH) {
+  try {
+    const plaintext = await decryptLetter(val, CONFIG.FLOPPY_CIPHER);
     floppyUnlocked = true;
-    addLine('');
-    addLine('Access granted.', 'dim');
+    floppyDecryptedContent = plaintext;
     gameRead(['floppy']);
-  } else {
+  } catch {
     addLine('');
     addLine('Incorrect password.', 'dim');
     addLine('');
