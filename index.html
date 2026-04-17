@@ -387,6 +387,17 @@ const ITEMS = [
 
   // ── Desk items (onDesk: true — visible only when you examine the desk) ───
   {
+    id:       'tmz flyer',
+    label:    'a flyer from the printer',
+    onDesk:   true,
+    examDesc: 'A fresh printout, still slightly warm. Touch Me Zoo at the Khyber Pass.',
+    content:
+`TOUCH ME ZOO
+The Khyber Pass  --  56 S. 2nd St., Philadelphia
+Friday, October 8, 1993  --  Doors at 8pm
+$3`,
+  },
+  {
     id:       'pens',
     label:    'some pens',
     onDesk:   true,
@@ -542,7 +553,13 @@ const SCENERY = {
   },
   printer: {
     names: ['printer', 'dot matrix', 'dot-matrix', 'print', 'output tray', 'tray'],
-    desc: 'A dot-matrix printer on the desk beside the monitor. Paper loaded, ready to go.',
+    desc() {
+      const flyer = ITEMS.find(i => i.id === 'tmz flyer');
+      const flyerGone = !flyer || gInventory.includes('tmz flyer') || flyer.dropped;
+      return flyerGone
+        ? 'A dot-matrix printer on the desk beside the monitor. Paper loaded, ready to go.'
+        : 'A dot-matrix printer on the desk beside the monitor. A flyer is sitting in the output tray.';
+    },
   },
   drawer: {
     names: ['drawer', 'desk drawer'],
