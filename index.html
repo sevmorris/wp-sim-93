@@ -967,6 +967,10 @@ const SCENERY = {
     names: ['sink', 'dishes', 'dish', 'plate', 'plates', 'glass'],
     desc: 'A few plates and a glass in the sink. Nothing alarming.',
   },
+  trash: {
+    names: ['trash', 'trash can', 'garbage', 'garbage can', 'bin', 'wastebasket', 'waste basket', 'can'],
+    desc: 'A small trash can under the counter. The bag is about half full.',
+  },
   book: {
     names: ['bookshelf', 'book shelf', 'books', 'book', 'paperback', 'paperbacks', 'fiction', 'textbooks', 'textbook', 'spine', 'north shelf'],
     desc() {
@@ -1501,6 +1505,10 @@ for (const it of ITEMS) {
   it._origInDrawer        = it.inDrawer        || false;
   it._origInKitchenDrawer = it.inKitchenDrawer || false;
   it._origOnCounter       = it.onCounter       || false;
+  it._origLabel           = it.label;
+  it._origExamDesc        = it.examDesc;
+  it._origExamThought     = it.examThought     || null;
+  it._origTakeNote        = it.takeNote        || null;
 }
 
 function startAdventure() {
@@ -1547,6 +1555,11 @@ function startAdventure() {
     it.inDrawer        = it._origInDrawer;
     it.inKitchenDrawer = it._origInKitchenDrawer;
     it.onCounter       = it._origOnCounter;
+    it.label           = it._origLabel;
+    it.examDesc        = it._origExamDesc;
+    it.examThought     = it._origExamThought;
+    it.takeNote        = it._origTakeNote;
+    it._used           = false;
     it.dropped         = false;
   }
 
@@ -2199,6 +2212,27 @@ function gameDumpMug() {
   addLine('You pour the coffee down the sink. The mug is empty.');
 }
 
+function gameThrowAway(args) {
+  if (!args.length) { pendingVerb = 'throw away'; addLine('Throw what away?'); return; }
+  const word = args.join(' ')
+    .replace(/^away\s*/, '')
+    .replace(/\s+(in(to)?|at)\s+(the\s+)?(trash|garbage|bin|can|waste\s*basket).*$/, '')
+    .trim();
+  const it = word
+    ? ITEMS.find(i => gInventory.includes(i.id) && (i.id === word || i.label.toLowerCase().includes(word)))
+    : (gInventory.length === 1 ? ITEMS.find(i => i.id === gInventory[0]) : null);
+  if (!it) {
+    if (!gInventory.length) { addLine("You're not holding anything."); return; }
+    addLine("What do you want to throw away?");
+    return;
+  }
+  if (!gInventory.includes(it.id)) { addLine("You're not holding that."); return; }
+  gInventory = gInventory.filter(id => id !== it.id);
+  it.hidden  = true;
+  it.dropped = false;
+  addLine(`You toss ${it.label} in the trash.`);
+}
+
 function gamePourOutCoffee() {
   if (coffeePotState === 'empty') {
     addLine('The carafe is already empty.');
@@ -2348,12 +2382,17 @@ function gameAddHalfAndHalf() {
   if (!gInventory.includes('mug'))            { addLine("You don't have a mug."); return; }
   if (!mugFilled)                             { addLine("Pour some coffee first."); return; }
   if (mugHasHalf)                             { addLine("Already in there."); return; }
-  if (!gInventory.includes('half and half'))  { addLine("You're not holding the half & half."); return; }
-  mugHasHalf = true;
-  gInventory = gInventory.filter(id => id !== 'half and half');
   const it = ITEMS.find(i => i.id === 'half and half');
-  if (it) it.hidden = true;
+  if (!gInventory.includes('half and half'))  { addLine("You're not holding the half & half."); return; }
+  if (it && it._used)                         { addLine("The carton is empty."); return; }
+  mugHasHalf  = true;
+  it._used    = true;
+  it.label    = 'an empty half & half carton';
+  it.examDesc = 'An empty cardboard carton. Toss it.';
+  it.examThought = null;
+  it.takeNote    = null;
   addLine('You tip in the last of it. The coffee goes pale.');
+  addLine('The carton is empty.', 'dim');
 }
 
 function _drinkWater() {
@@ -2966,10 +3005,27 @@ function gameHelp() {
     '  go <direction>      — move around',
     '  inventory  (i)      — what you\'re carrying',
     '  wait  (z)           — pass a moment',
+    '  transcript          — save session output to a text file',
     '  quit                — return to the terminal',
     '  help  (?)           — this message',
   ];
   for (const l of lines) addLine(l);
+}
+
+function gameTranscript() {
+  const text = Array.from(outputEl.querySelectorAll('.line'))
+    .map(el => el.textContent)
+    .join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'west-philly-93.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  addLine('Transcript saved.', 'dim');
 }
 
 async function handleFloppyPass(val) {
@@ -3098,6 +3154,9 @@ function handleGameCommand(raw) {
     else if (coffeePotState === 'brewing')
       addLine("It's already going.");
   }
+  else if (cmd === 'throw' && args[0] === 'away')                            { gameThrowAway(args.slice(1)); }
+  else if (cmd === 'throw' && /trash|garbage|bin|away|out/.test(rest))       { gameThrowAway(args); }
+  else if ((cmd === 'toss' || cmd === 'discard') && rest)                     { gameThrowAway(args); }
   else if ((cmd === 'dump' || cmd === 'empty') && /mug|cup/.test(rest))      { gameDumpMug(); }
   else if (cmd === 'pour' && /out/.test(rest) && /mug|cup/.test(rest))       { gameDumpMug(); }
   else if ((cmd === 'pour' || cmd === 'dump' || cmd === 'empty' || cmd === 'discard') &&
@@ -3215,6 +3274,7 @@ function handleGameCommand(raw) {
       case 'turn':                                      addLine('Turn what on or off?'); break;
 
       // ── Physics ──────────────────────────────────────────────────────────
+      case 'throw': case 'toss': case 'discard':         gameThrowAway(args); break;
       case 'push': case 'shove':                        addLine("That doesn't budge."); break;
       case 'pull':                                      addLine('You give it a tug. Nothing moves.'); break;
 
@@ -3272,6 +3332,7 @@ function handleGameCommand(raw) {
         break;
 
       // ── Help & quit ──────────────────────────────────────────────────────
+      case 'transcript': case 'script': case 'export':   gameTranscript();      break;
       case 'help': case '?':                            gameHelp();            break;
       case 'quit': case 'exit': case 'bye':
         addLine('');
