@@ -475,7 +475,7 @@ Type  buckingham  to play.
      content   : text shown when they  read  it (optional)
 */
 const ROOM_DESC =
-`A small living room. A metal desk sits against the west wall — a PC on it, monitor glowing blue-gray, an old lamp from Second Mile Thrift Store beside it. In the northwest corner, a small table holds a phone and an answering machine. Records and a turntable line the south wall. An old sofa sits in the middle of the room, facing the television — a cat curled up on one end. Books, cassettes, a boombox, and a shelf of VHS tapes line the north wall. The kitchen is open to the east. Rain against the window.`;
+`A small living room. A metal desk sits against the west wall — a PC on it, monitor glowing blue-gray, an old lamp from Second Mile Thrift Store beside it. In the northwest corner, a small table holds a phone and an answering machine. Records and a turntable line the south wall. An old sofa sits in the middle of the room, facing the television — a cat curled up on one end. Books and a shelf of VHS tapes line the north wall. In the northeast corner, near the door to the back bedroom, a battered boombox sits on a small shelf with a rack of cassettes beside it. The kitchen is open to the east. Rain against the window.`;
 
 const ITEMS = [
 
@@ -842,21 +842,21 @@ const SCENERY = {
     desc() {
       const available = ITEMS.filter(it => it.shelvedBook && !gInventory.includes(it.id) && !it.dropped);
       const titles = available.map(it => it.label).join(', ');
-      return `A wooden bookshelf along the north wall. Titles: ${titles}. A shelf of VHS tapes sits alongside it.`;
+      return `A wooden bookshelf along the north wall. Titles: ${titles}. The VHS shelf sits right beside it.`;
     },
   },
   cassetteShelf: {
-    names: ['cassette shelf', 'cassette rack', 'cassettes', 'tapes', 'tape shelf', 'tape rack'],
+    names: ['cassette shelf', 'cassette rack', 'cassettes', 'tape', 'tapes', 'tape shelf', 'tape rack', 'ne corner', 'northeast corner'],
     desc() {
       const available = ITEMS.filter(it => it.shelvedTape && !gInventory.includes(it.id) && !it.dropped);
       const titles = available.map(it => it.label).join(', ');
-      return `A small rack of cassettes on the shelf beside the boombox. You can see: ${titles}.`;
+      return `A small rack of cassettes in the northeast corner, beside the boombox and near the door to the back bedroom. You can see: ${titles}.`;
     },
   },
   boombox: {
     names: ['boombox', 'boom box', 'boom-box', 'stereo', 'tape player', 'cassette player', 'tape deck'],
     desc() {
-      if (!boomBoxOn) return 'A battered boombox on the shelf near the cassettes. Power light off.';
+      if (!boomBoxOn) return 'A battered boombox in the northeast corner, on a shelf beside the cassettes. Power light off.';
       if (cassettePlaying) return `The boombox is on. ${cassettePlaying} is playing.`;
       return "The boombox is on. Nothing in the deck — just a hiss of static.";
     },
@@ -920,12 +920,16 @@ const SCENERY = {
     },
   },
   answeringMachine: {
-    names: ['answering machine', 'machine', 'messages', 'voicemail', 'tape', 'message light', 'blinking light', 'red light'],
+    names: ['answering machine', 'machine', 'messages', 'voicemail', 'message light', 'blinking light', 'red light'],
     desc() {
       return messageHeard
         ? 'The answering machine. Red light is off — no new messages.'
         : 'The answering machine. The red light is blinking. One message.';
     },
+  },
+  bedroomDoor: {
+    names: ['back bedroom', 'bedroom', 'bedroom door', 'back bedroom door', 'back door'],
+    desc: 'A door in the northeast corner leading to the back bedroom. Closed.',
   },
 };
 
@@ -973,7 +977,7 @@ let stoveOn           = false; // stove burner is lit
 let scrappleInPan     = false; // scrapple has been sliced into the pan
 let scrappleCooked    = false; // scrapple is fully cooked and ready to eat
 let ejectNudged   = false;   // eject nudge has been shown once since reading
-let playerArea    = null;    // rough location: null=general, 'desk', 'sofa', 'kitchen', 'shelf', 'north'
+let playerArea    = null;    // rough location: null=general, 'desk', 'sofa', 'kitchen', 'shelf', 'north', 'ne'
 let lastScenery   = null;    // last scenery name — 'it'/'that' resolves to this when no lastItem
 let vcrOn         = false;   // VCR power state
 let vhsPlaying    = null;    // label of VHS currently playing (for display)
@@ -1425,8 +1429,11 @@ function gameItem(word) {
 function findScenery(word) {
   const w      = word.toLowerCase().trim();
   const wWords = w.split(/\s+/);
+  // Pass 1: exact name match — prevents multi-word input from matching a shorter name first
+  const exact = Object.values(SCENERY).find(s => s.names.includes(w));
+  if (exact) return exact;
+  // Pass 2: partial / word match fallback
   return Object.values(SCENERY).find(s => s.names.some(n => {
-    if (n === w) return true;                                         // exact match
     const nWords = n.split(/\s+/);
     if (nWords.length === 1 && wWords.includes(n)) return true;      // "lamp" in "old lamp"
     if (wWords.length === 1 && nWords.includes(w)) return true;      // "lamp" matches name "old lamp"
@@ -1666,6 +1673,16 @@ function gameExamine(args) {
   }
   if (/^(nothing|air|darkness)$/.test(word)) { addLine('Right.'); return; }
 
+  // For generic words, check what the player is holding before falling through to scenery
+  if (/^(tape|cassette|vhs|video)$/.test(word)) {
+    const held = ITEMS.find(i => gInventory.includes(i.id) && (i.shelvedTape || i.shelvedVHS));
+    if (held && !held.hidden) {
+      lastItem = held.id;
+      addLine(typeof held.examDesc === 'function' ? held.examDesc() : held.examDesc);
+      return;
+    }
+  }
+
   // Check scenery first
   const sc = findScenery(word);
   if (sc) { lastScenery = sc.names[0]; addLine(typeof sc.desc === 'function' ? sc.desc() : sc.desc); return; }
@@ -1844,6 +1861,12 @@ function gameInsertVHS() {
   gamePlay([tape.id]);
 }
 
+function gameInsertCassette() {
+  const tape = ITEMS.find(i => i.shelvedTape && gInventory.includes(i.id));
+  if (!tape) { addLine("You're not holding a cassette tape."); return; }
+  gamePlay([tape.id]);
+}
+
 function gameEjectFloppy() {
   autoStand();
   if (!floppyInserted) { addLine("There's no disk in the drive."); return; }
@@ -2010,11 +2033,19 @@ function gameGo(args) {
     addLine(typeof SCENERY.shelf.desc === 'function' ? SCENERY.shelf.desc() : SCENERY.shelf.desc);
     return;
   }
-  if (/^(north|bookshelf|books|cassettes|tapes|boombox|vhs|videos|video shelf|vhs shelf|videotapes)$/.test(dest)) {
+  if (/^(north|bookshelf|books|vhs|videos|video shelf|vhs shelf|videotapes)$/.test(dest)) {
     playerArea = 'north';
     addLine('You walk to the north shelves.');
     addLine('');
     addLine(typeof SCENERY.book.desc === 'function' ? SCENERY.book.desc() : SCENERY.book.desc);
+    return;
+  }
+  if (/^(ne|northeast|boombox|cassettes|cassette shelf|cassette rack|back bedroom)$/.test(dest)) {
+    playerArea = 'ne';
+    addLine('You walk to the northeast corner.');
+    addLine('');
+    addLine(typeof SCENERY.cassetteShelf.desc === 'function' ? SCENERY.cassetteShelf.desc() : SCENERY.cassetteShelf.desc);
+    lastScenery = 'cassette shelf';
     return;
   }
   if (/^(sofa|couch)$/.test(dest)) { playerArea = 'sofa'; gameSit(['sofa']); return; }
@@ -2032,8 +2063,9 @@ function gameGo(args) {
   if (sc) {
     const kitchenThings = /fridge|refrigerator|stove|range|burner|cabinet|coffee|sink|counter|kitchen drawer/;
     const deskThings    = /desk|chair|computer|pc|monitor|printer/;
-    if (kitchenThings.test(dest))   playerArea = 'kitchen';
-    else if (deskThings.test(dest)) playerArea = 'desk';
+    if (kitchenThings.test(dest))                          playerArea = 'kitchen';
+    else if (deskThings.test(dest))                        playerArea = 'desk';
+    else if (sc === SCENERY.cassetteShelf || sc === SCENERY.boombox) playerArea = 'ne';
     const prefix = kitchenThings.test(dest) ? 'You step into the kitchen.' : 'You walk over.';
     lastScenery = sc.names[0];
     addLine(prefix);
@@ -2415,7 +2447,11 @@ function gameStop(args) {
 }
 
 function gameEjectVHS() {
-  if (!vhsPlayingId) { addLine("There's no tape in the VCR."); return; }
+  if (!vhsPlayingId) {
+    if (cassettePlaying) { addLine("The cassette is already in your hands. Use  stop  to stop the boombox."); return; }
+    addLine("There's no tape in the VCR.");
+    return;
+  }
   const tape = ITEMS.find(i => i.id === vhsPlayingId);
   if (tape && !gInventory.includes(tape.id)) gInventory.push(tape.id);
   const was = vhsPlaying;
@@ -2518,11 +2554,17 @@ function handleGameCommand(raw) {
   else if (cmd === 'press'  && /play/.test(rest))                       { gamePlayMessage(); }
   else if (cmd === 'pick'   && /phone|up the phone/.test(rest))         { addLine('You pick up the receiver. Dial tone.'); }
   else if (cmd === 'hang'   && /up/.test(rest))                         { addLine('You set the receiver back down.'); }
-  else if ((cmd === 'insert' || cmd === 'load') && /vhs|tape|video|cassette/.test(rest)) { gameInsertVHS(); }
+  else if ((cmd === 'insert' || cmd === 'load') && /vhs|video/.test(rest))              { gameInsertVHS(); }
+  else if ((cmd === 'insert' || cmd === 'load') && /cassette/.test(rest))               { gameInsertCassette(); }
+  else if ((cmd === 'insert' || cmd === 'load') && /tape/.test(rest)) {
+    if (ITEMS.some(i => i.shelvedVHS    && gInventory.includes(i.id)))  gameInsertVHS();
+    else if (ITEMS.some(i => i.shelvedTape && gInventory.includes(i.id))) gameInsertCassette();
+    else gameInsertFloppy();
+  }
   else if (cmd === 'insert' && /floppy|disk/.test(rest))                { gameInsertFloppy(); }
   else if (cmd === 'eject'  && /floppy|disk/.test(rest))                { gameEjectFloppy(); }
   else if (cmd === 'remove' && /floppy|disk/.test(rest))                { gameEjectFloppy(); }
-  else if ((cmd === 'eject' || cmd === 'remove') && /vhs|vcr|video|movie|tape/.test(rest)) { gameEjectVHS(); }
+  else if ((cmd === 'eject' || cmd === 'remove') && /vhs|vcr|video|movie|tape|cassette/.test(rest)) { gameEjectVHS(); }
   else if (cmd === 'put'    && /floppy|disk/.test(rest) && /computer|drive|slot/.test(rest)) { gameInsertFloppy(); }
   else if (cmd === 'put'    && /vhs|tape|video|movie/.test(rest) && /vcr|player/.test(rest)) { gamePlay(rest.replace(/\s*(in(to)?|the)\s*(vcr|player)/g, '').trim().split(' ')); }
   else if (cmd === 'dir'    && /floppy|disk/.test(rest))                { floppyInserted ? (addLine(''), addLine('A:\\'), addLine('  LETTER  TXT     2048  10-03-93  11:48p')) : addLine("There's no disk in the drive."); }
@@ -2573,7 +2615,9 @@ function handleGameCommand(raw) {
 
       // ── Floppy ───────────────────────────────────────────────────────────
       case 'insert': case 'load':
-        ITEMS.some(it => it.shelvedVHS && gInventory.includes(it.id)) ? gameInsertVHS() : gameInsertFloppy();
+        if      (ITEMS.some(i => i.shelvedVHS  && gInventory.includes(i.id))) gameInsertVHS();
+        else if (ITEMS.some(i => i.shelvedTape && gInventory.includes(i.id))) gameInsertCassette();
+        else gameInsertFloppy();
         break;
       case 'eject':  case 'remove':                     floppyInserted ? gameEjectFloppy() : gameEjectVHS(); break;
 
