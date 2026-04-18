@@ -2048,6 +2048,7 @@ function gameGo(args) {
     return;
   }
   if (/^tapes?$/.test(dest)) {
+    pendingVerb = 'go to';
     addLine('Which tapes — cassettes or VHS?');
     return;
   }
