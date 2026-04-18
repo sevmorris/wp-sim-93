@@ -1055,6 +1055,7 @@ let recordPlaying = null;   // label of record currently on turntable
 let cabinetOpen   = false;   // kitchen cabinet state
 let mugFilled     = false;   // whether the mug has coffee in it
 let mugHasHalf    = false;   // whether half & half has been added
+let farted        = false;   // rank smell lingering in the room
 let glassFilled   = false;   // whether the glass has water in it
 let seated        = false;   // player is seated
 let boomBoxOn     = false;   // boombox power state
@@ -1476,6 +1477,7 @@ function startAdventure() {
   mugFilled       = false;
   mugHasHalf      = false;
   glassFilled     = false;
+  farted          = false;
   seated          = false;
   boomBoxOn       = false;
   cassettePlaying = null;
@@ -1571,6 +1573,7 @@ function gameLook() {
                : it.roomDesc || `${it.label.charAt(0).toUpperCase() + it.label.slice(1)} is here.`;
     addLine(desc, 'dim');
   }
+  if (farted) { addLine('There\'s a rank smell in the room. Yours.', 'dim'); farted = false; }
   if (seated) addLine('You are sitting on the sofa.', 'dim');
 }
 
@@ -2424,6 +2427,7 @@ function gameSmell(args) {
   const target = (args || []).join(' ');
   if (!target) {
     const parts = [];
+    if (farted) { parts.push('something rank — that was you'); farted = false; }
     if (scrappleInPan && stoveOn && !scrappleCooked) parts.push('sizzling scrapple — sage, cornmeal, pork fat. It fills the whole apartment');
     else if (scrappleCooked) parts.push('cooked scrapple going cold in the kitchen');
     parts.push('rain coming through the window crack');
@@ -2973,6 +2977,8 @@ function handleGameCommand(raw) {
       // ── Nonsense & chaos ─────────────────────────────────────────────────
       case 'fart':
         addLine(seated ? 'You let one go into the sofa cushion. Cracker opens one eye.' : 'You rip one. The room is unimpressed.');
+        addLine('It lingers.', 'dim');
+        farted = true;
         break;
       case 'die': case 'kill': case 'murder':
         addLine('This is not that kind of game. You are fine.');
