@@ -2034,6 +2034,7 @@ function gameOpen(args) {
       addLine('The drawer is empty.', 'dim');
     return;
   }
+  if (/half.*(half|&)/.test(word)) { gameAddHalfAndHalf(); return; }
   if (/door/.test(word)) { addLine("You're not going anywhere right now."); return; }
   addLine("You can't open that.");
 }
@@ -2855,10 +2856,11 @@ function handleGameCommand(raw) {
   else if (cmd === 'watch' && /vcr|vhs|movie|film|video/.test(rest))   { gameWatch(args); }
   else if (cmd === 'lift'  && /needle/.test(rest))                      { gameStop(['needle']); }
   else if (/^(pour|add|mix|put|splash)$/.test(cmd) && /half.*(half|&)|creamer|cream/.test(rest)) { gameAddHalfAndHalf(); }
+  else if (/^(pour|add|mix|splash)$/.test(cmd) && /^(in(to)?|to)\s+(the\s+)?(mug|cup|coffee)/.test(rest) && gInventory.includes('half and half')) { gameAddHalfAndHalf(); }
   else if ((cmd === 'fill' || cmd === 'pour') && /mug|cup/.test(rest))       { gameFillMug(); }
   else if ((cmd === 'fill' || cmd === 'pour') && /glass|water/.test(rest))   { gameFillGlass(); }
   else if (cmd === 'get'   && /water/.test(rest))                            { gameFillGlass(); }
-  else if (cmd === 'pour'  && /coffee/.test(rest))                           { gameFillMug(); }
+  else if (cmd === 'pour'  && /coffee/.test(rest) && !gInventory.includes('half and half')) { gameFillMug(); }
   else if (cmd === 'get'   && /coffee/.test(rest))                           { gameFillMug(); }
   else if (cmd === 'drink' && /water|glass/.test(rest))                      { gameDrink(['water']); }
   // ── TV channel / input switching ────────────────────────────────────────
