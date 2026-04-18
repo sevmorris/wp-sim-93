@@ -126,6 +126,93 @@
       #input-row  { padding: 4px 8px 6px; }
       #panel      { padding: 4px 6px; }
     }
+
+    /* ── CRT overlay (floppy letter) ────────────────────────────────────────── */
+    #crt-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #020502;
+      font-family: 'VT323', 'Courier New', Courier, monospace;
+      font-size: 24px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      overflow: hidden;
+      cursor: default;
+    }
+    #crt-overlay.visible {
+      opacity: 1;
+      animation: crt-flicker 11s ease-in-out infinite;
+    }
+
+    @keyframes crt-flicker {
+      0%,  89%, 100% { opacity: 1; }
+      90%  { opacity: 0.97; }
+      91%  { opacity: 1; }
+      93%  { opacity: 0.96; }
+      94%  { opacity: 1; }
+    }
+
+    /* Scanlines */
+    #crt-overlay::before {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent 0, transparent 2px,
+        rgba(0,0,0,0.14) 2px, rgba(0,0,0,0.14) 4px
+      );
+      pointer-events: none;
+      z-index: 1;
+    }
+    /* Vignette */
+    #crt-overlay::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 48%, rgba(0,0,0,0.72) 100%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    #crt-screen {
+      position: relative; z-index: 2;
+      max-width: 700px; width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 2.5rem 2rem;
+      scrollbar-width: thin;
+      scrollbar-color: #1a6b1a transparent;
+    }
+    #crt-screen::-webkit-scrollbar       { width: 4px; }
+    #crt-screen::-webkit-scrollbar-thumb { background: #1a6b1a; }
+
+    #crt-bar {
+      color: #1a6b1a;
+      border-bottom: 1px solid #0d3d0d;
+      padding-bottom: 0.5rem;
+      margin-bottom: 1.4rem;
+      letter-spacing: 0.04em;
+    }
+    #crt-body {
+      color: #dfffdf;
+      white-space: pre-wrap;
+      line-height: 1.7;
+      text-shadow: 0 0 8px rgba(80,255,80,0.28);
+    }
+    #crt-foot {
+      color: #1a6b1a;
+      border-top: 1px solid #0d3d0d;
+      margin-top: 2rem;
+      padding-top: 0.6rem;
+      text-align: center;
+    }
+
+    @media (max-width: 600px) {
+      #crt-overlay { font-size: 15px; }
+      #crt-screen  { padding: 1.2rem 0.9rem; }
+    }
   </style>
 </head>
 <body>
@@ -136,6 +223,14 @@
     <span id="prompt"></span>
     <input id="cmd-input" type="text" autocomplete="off" autocorrect="off"
            autocapitalize="off" spellcheck="false" aria-label="terminal input">
+  </div>
+</div>
+
+<div id="crt-overlay">
+  <div id="crt-screen">
+    <div id="crt-bar"></div>
+    <div id="crt-body"></div>
+    <div id="crt-foot">[ PRESS ANY KEY ]<span class="cursor"></span></div>
   </div>
 </div>
 
@@ -1502,16 +1597,11 @@ function gameRead(args) {
         addLine("There's no disk in the drive.");
       return;
     }
-    // If already decrypted this session, show cached content
+    // If already decrypted this session, show in CRT overlay
     if (floppyUnlocked && floppyDecryptedContent) {
-      addLine('');
-      addLine('[ letter.txt — Floppy Letter 2601 ]', 'dim');
-      addLine('');
-      for (const line of floppyDecryptedContent.split('\n')) addLine(line, 'white');
-      floppyRead = true;
+      floppyRead  = true;
       ejectNudged = false;
-      addLine('');
-      addLine('( eject floppy when you\'re done )', 'dim');
+      showCRTLetter(floppyDecryptedContent);
       return;
     }
     // Password / cipher gate
@@ -2587,8 +2677,48 @@ function handleGameCommand(raw) {
   inputEl.value = '';
 }
 
+// ── CRT overlay (floppy letter) ─────────────────────────────────────────────
+const crtOverlayEl = document.getElementById('crt-overlay');
+const crtBodyEl    = document.getElementById('crt-body');
+const crtBarEl     = document.getElementById('crt-bar');
+
+function showCRTLetter(content) {
+  crtBarEl.textContent  = 'A:\\LETTER  TXT     2048  10-03-93  11:48p';
+  crtBodyEl.textContent = content;
+  crtOverlayEl.style.display = 'flex';
+  // Two rAF frames to let display:flex apply before opacity transitions
+  requestAnimationFrame(() => requestAnimationFrame(() => crtOverlayEl.classList.add('visible')));
+  inputEl.blur();
+}
+
+function hideCRTLetter() {
+  crtOverlayEl.classList.remove('visible');
+  setTimeout(() => {
+    crtOverlayEl.style.display = 'none';
+    document.getElementById('crt-screen').scrollTop = 0;
+    inputEl.focus();
+    addLine('');
+    addLine('( eject floppy when you\'re done )', 'dim');
+    addLine('');
+    ejectNudged = true;
+    promptEl.textContent = '> ';
+    inputEl.value = '';
+  }, 300);
+}
+
+crtOverlayEl.addEventListener('click', () => {
+  if (crtOverlayEl.classList.contains('visible')) hideCRTLetter();
+});
+
 // ── Input event handler ────────────────────────────────────────────────────
 inputEl.addEventListener('keydown', async (e) => {
+  // ── CRT overlay ──────────────────────────────────────────────────────────
+  if (crtOverlayEl.classList.contains('visible')) {
+    e.preventDefault();
+    hideCRTLetter();
+    return;
+  }
+
   // ── Pager ────────────────────────────────────────────────────────────────
   if (state === 'more') {
     if (e.key === ' ' || e.key === 'Enter' || e.key === 'q') {
