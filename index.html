@@ -1377,7 +1377,7 @@ function handleCommand(raw) {
     case 'finger':  cmdFinger(args);  break;
     case 'file':    cmdFile(args);    break;
     case 'echo':    cmdEcho(args);    break;
-    case 'clear':   clearOutput(); showPrompt(); return;
+    case 'clear': case 'cls':  clearOutput(); boot(); return;
     case 'help':
     case '?':       cmdHelp();        break;
     case 'logout':
