@@ -3149,9 +3149,9 @@ function handleGameCommand(raw) {
   else if ((cmd === 'insert' || cmd === 'load') && /vhs|video/.test(rest))              { gameInsertVHS(); }
   else if ((cmd === 'insert' || cmd === 'load') && /cassette/.test(rest))               { gameInsertCassette(); }
   else if ((cmd === 'insert' || cmd === 'load') && /tape/.test(rest)) {
-    if (ITEMS.some(i => i.shelvedVHS    && gInventory.includes(i.id)))  gameInsertVHS();
-    else if (ITEMS.some(i => i.shelvedTape && gInventory.includes(i.id))) gameInsertCassette();
-    else gameInsertFloppy();
+    if      (ITEMS.some(i => i.shelvedVHS  && gInventory.includes(i.id)))                                  gameInsertVHS();
+    else if (ITEMS.some(i => i.shelvedTape && gInventory.includes(i.id) && cassettePlaying !== i.label))   gameInsertCassette();
+    else                                                                                                    gameInsertFloppy();
   }
   else if (cmd === 'insert' && /floppy|disk/.test(rest))                { gameInsertFloppy(); }
   else if (cmd === 'eject'  && /floppy|disk/.test(rest))                { gameEjectFloppy(); }
@@ -3261,10 +3261,12 @@ function handleGameCommand(raw) {
 
       // ── Floppy ───────────────────────────────────────────────────────────
       case 'insert': case 'load': {
-        const hasNonPlayingVHS = ITEMS.some(i => i.shelvedVHS && gInventory.includes(i.id) && i.id !== vhsPlayingId);
-        if      (hasNonPlayingVHS)                                               gameInsertVHS();
-        else if (ITEMS.some(i => i.shelvedTape && gInventory.includes(i.id)))    gameInsertCassette();
-        else                                                                     gameInsertFloppy();
+        const hasNonPlayingVHS  = ITEMS.some(i => i.shelvedVHS  && gInventory.includes(i.id) && i.id !== vhsPlayingId);
+        const hasUnloadedTape   = ITEMS.some(i => i.shelvedTape && gInventory.includes(i.id) && cassettePlaying !== i.label);
+        if      (gInventory.includes('floppy'))  gameInsertFloppy();
+        else if (hasNonPlayingVHS)               gameInsertVHS();
+        else if (hasUnloadedTape)                gameInsertCassette();
+        else                                     gameInsertFloppy();
         break;
       }
       case 'eject':  case 'remove':                     floppyInserted ? gameEjectFloppy() : gameEjectVHS(); break;
