@@ -1630,6 +1630,15 @@ function gameTake(args) {
     return;
   }
 
+  // Generic "book"
+  if (/^(book|a book|the book)$/.test(word)) {
+    const available = ITEMS.filter(it => it.shelvedBook && !gInventory.includes(it.id) && !it.dropped);
+    if (!available.length) { addLine('There are no books left on the shelf.'); return; }
+    if (available.length === 1) { gInventory.push(available[0].id); lastItem = available[0].id; addLine(`You take ${available[0].label} off the shelf.`); }
+    else { addLine('Which book?'); for (const b of available) addLine(`  ${b.label}`); }
+    return;
+  }
+
   // Generic "beer"
   if (/^(beer|a beer|the beer)$/.test(word)) {
     if (!fridgeOpen) { addLine('The fridge is closed.'); return; }
@@ -1686,11 +1695,35 @@ function gameTake(args) {
 
 function gameDrop(args) {
   if (!args.length) { pendingVerb = 'drop'; addLine('Drop what?'); return; }
-  autoStand();
   // Strip trailing filler words ("put record back", "put it down", "put away")
-  const raw = args.join(' ').replace(/\s+(back|away|down|there|here)$/, '').trim();
+  let raw = args.join(' ').replace(/\s+(back|away|down|there|here)$/, '').trim();
+
+  // Resolve generic category words to a specific held item
+  if (/^(book|a book|the book)$/.test(raw)) {
+    const held = ITEMS.filter(it => it.shelvedBook && gInventory.includes(it.id));
+    if (!held.length) { addLine("You're not carrying a book."); return; }
+    if (held.length > 1) { addLine('Which book?'); for (const b of held) addLine(`  ${b.label}`); return; }
+    raw = held[0].id;
+  } else if (/^(record|a record|the record)$/.test(raw)) {
+    const held = ITEMS.filter(it => it.shelved && gInventory.includes(it.id));
+    if (!held.length) { addLine("You're not carrying a record."); return; }
+    if (held.length > 1) { addLine('Which record?'); for (const r of held) addLine(`  ${r.label}`); return; }
+    raw = held[0].id;
+  } else if (/^(cassette|tape|a cassette|a tape)$/.test(raw)) {
+    const held = ITEMS.filter(it => it.shelvedTape && gInventory.includes(it.id));
+    if (!held.length) { addLine("You're not carrying a cassette."); return; }
+    if (held.length > 1) { addLine('Which tape?'); for (const t of held) addLine(`  ${t.label}`); return; }
+    raw = held[0].id;
+  } else if (/^(vhs|video|vhs tape|a vhs|a video)$/.test(raw)) {
+    const held = ITEMS.filter(it => it.shelvedVHS && gInventory.includes(it.id));
+    if (!held.length) { addLine("You're not carrying a VHS tape."); return; }
+    if (held.length > 1) { addLine('Which tape?'); for (const v of held) addLine(`  ${v.label}`); return; }
+    raw = held[0].id;
+  }
+
   const it = gameItem(raw);
   if (!it || !gInventory.includes(it.id)) { addLine("You're not carrying that."); return; }
+  autoStand();
   gInventory = gInventory.filter(id => id !== it.id);
   it.dropped = true;
   // Stop playback if the item was active
