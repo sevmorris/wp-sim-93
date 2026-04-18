@@ -4,7 +4,7 @@ A browser-based text adventure set in a West Philadelphia apartment, October 199
 
 Late morning. It's raining — one of those that keeps you inside. Nothing on the agenda.
 
-There's no score. No inventory puzzle to solve. No boss fight. Just a small living room, some records, a cat named Cracker, and whatever you feel like doing with your morning.
+There's no score. No inventory puzzle to solve. No boss fight. Just a small living room and a kitchen, some records, a cat named Cracker, and whatever you feel like doing with your morning.
 
 **[Play it here](https://sevmorris.github.io/buckingham-sim-93/)**
 
