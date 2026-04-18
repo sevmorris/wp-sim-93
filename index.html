@@ -1714,7 +1714,16 @@ function gameInventory() {
 }
 
 function gameToggle(args, on) {
-  if (!args.length) { addLine(on ? 'Turn what on?' : 'Turn what off?'); return; }
+  if (!args.length) {
+    // Infer target from last examined/navigated-to scenery
+    if (lastScenery) {
+      const sc = findScenery(lastScenery);
+      if (sc && sc.toggle) { on ? sc.turnOn() : sc.turnOff(); return; }
+    }
+    pendingVerb = on ? 'turn on' : 'turn off';
+    addLine(on ? 'Turn what on?' : 'Turn what off?');
+    return;
+  }
   const word = args.join(' ');
   const sc   = findScenery(word);
   if (!sc || !sc.toggle) { addLine(`You can't turn that ${on ? 'on' : 'off'}.`); return; }
