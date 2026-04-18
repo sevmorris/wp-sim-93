@@ -1984,7 +1984,7 @@ function gameToggle(args, on) {
 }
 
 function gamePlay(args) {
-  if (!args.length) { addLine('Play a record, a tape, or  play messages  for the answering machine.'); return; }
+  if (!args.length) { pendingVerb = 'play'; addLine('Play a record, a tape, or  play messages  for the answering machine.'); return; }
   const word = args.join(' ').replace(/^(the\s+|a\s+)/, '');
 
   // Generic play shorthands — find what's in hand
