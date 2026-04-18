@@ -1015,12 +1015,13 @@ const SCENERY = {
   vcr: {
     names: ['vcr', 'vhs player', 'video player', 'video recorder', 'vcr player'],
     desc() {
+      if (!vcrOn && vhsPlayingId) return `A VCR stacked under the television. Power light off. ${cap(vhsPlaying)} is loaded.`;
       if (!vcrOn) return 'A VCR stacked under the television. Power light off.';
       if (vhsPlaying) return `The VCR is on. ${cap(vhsPlaying)} is loaded and playing.`;
       return 'The VCR is on. No tape loaded.';
     },
     toggle: true,
-    turnOn()  { vcrOn = true;  addLine('The VCR clicks on. The clock blinks 12:00.'); },
+    turnOn()  { vcrOn = true;  addLine('The VCR clicks on. The clock blinks 12:00.'); if (vhsPlayingId && tvOn) addLine('The tape starts playing.', 'dim'); else if (vhsPlayingId) addLine('Turn on the TV to watch.', 'dim'); },
     turnOff() { vcrOn = false; vhsPlaying = null; vhsPlayingId = null; addLine('You click the VCR off.'); },
   },
   floor: {
@@ -1972,6 +1973,7 @@ function gameToggle(args, on) {
     if (on) {
       if (cassettePlaying && !boomBoxOn)               { findScenery('boombox').turnOn(); return; }
       if (scrappleInPan   && !stoveOn)                 { findScenery('stove').turnOn();   return; }
+      if (vhsPlayingId    && !vcrOn)                   { findScenery('vcr').turnOn();     return; }
       if (vhsPlaying      && !tvOn)                    { findScenery('tv').turnOn();      return; }
     } else {
       if (stoveOn)                                     { findScenery('stove').turnOff();   return; }
@@ -2038,14 +2040,14 @@ function gamePlay(args) {
 
   if (it.shelvedVHS) {
     if (!gInventory.includes(it.id)) { addLine(`Take ${it.label} off the shelf first.`); return; }
-    if (!vcrOn) { addLine("The VCR is off. Turn it on first."); return; }
-    if (vhsPlayingId === it.id) { addLine(`That tape is already playing.`); return; }
+    if (vhsPlayingId === it.id) { addLine(`That tape is already in the VCR.`); return; }
     if (vhsPlaying) addLine(`You swap out ${vhsPlaying} and slot in ${it.label}.`);
     else            addLine(`You slide ${it.label} into the VCR.`);
     vhsPlaying   = it.label;
     vhsPlayingId = it.id;
+    if (!vcrOn) { addLine('The VCR is off. Turn it on to play.', 'dim'); return; }
     if (!tvOn) {
-      addLine('The VCR hums. Turn on the TV to watch.');
+      addLine('The VCR hums. Turn on the TV to watch.', 'dim');
       return;
     }
     if (it.id.startsWith('unlabeled')) {
@@ -3019,9 +3021,18 @@ function gameStop(args) {
   addLine('Stop what?');
 }
 
+function gameEjectCassette() {
+  if (!cassettePlaying) { addLine("There's no tape in the boombox."); return; }
+  const tape = ITEMS.find(i => i.shelvedTape && i.label === cassettePlaying);
+  if (tape && !gInventory.includes(tape.id)) gInventory.push(tape.id);
+  const was = cassettePlaying;
+  cassettePlaying = null;
+  addLine(`The boombox ejects ${was}. You take it.`);
+}
+
 function gameEjectVHS() {
   if (!vhsPlayingId) {
-    if (cassettePlaying) { addLine("The cassette is already in your hands. Use  stop  to stop the boombox."); return; }
+    if (cassettePlaying) { addLine("Nothing in the VCR. The cassette is in the boombox — try  eject cassette."); return; }
     addLine("There's no tape in the VCR.");
     return;
   }
@@ -3156,7 +3167,8 @@ function handleGameCommand(raw) {
   else if (cmd === 'insert' && /floppy|disk/.test(rest))                { gameInsertFloppy(); }
   else if (cmd === 'eject'  && /floppy|disk/.test(rest))                { gameEjectFloppy(); }
   else if (cmd === 'remove' && /floppy|disk/.test(rest))                { gameEjectFloppy(); }
-  else if ((cmd === 'eject' || cmd === 'remove') && /vhs|vcr|video|movie|tape|cassette/.test(rest)) { gameEjectVHS(); }
+  else if ((cmd === 'eject' || cmd === 'remove') && /cassette|boombox/.test(rest))         { gameEjectCassette(); }
+  else if ((cmd === 'eject' || cmd === 'remove') && /vhs|vcr|video|movie|tape/.test(rest)) { gameEjectVHS(); }
   else if (cmd === 'put'    && /floppy|disk/.test(rest) && /computer|drive|slot/.test(rest)) { gameInsertFloppy(); }
   else if (cmd === 'put'    && /vhs|tape|video|movie/.test(rest) && /vcr|player/.test(rest)) { gamePlay(rest.replace(/\s*(in(to)?|the)\s*(vcr|player)/g, '').trim().split(' ')); }
   else if (cmd === 'dir'    && /floppy|disk/.test(rest))                { floppyInserted ? (addLine(''), addLine('A:\\'), addLine('  LETTER  TXT     2048  10-03-93  11:48p')) : addLine("There's no disk in the drive."); }
@@ -3269,10 +3281,29 @@ function handleGameCommand(raw) {
         else                                     gameInsertFloppy();
         break;
       }
-      case 'eject':  case 'remove':                     floppyInserted ? gameEjectFloppy() : gameEjectVHS(); break;
+      case 'eject':  case 'remove':
+        if      (floppyInserted)  gameEjectFloppy();
+        else if (vhsPlayingId)    gameEjectVHS();
+        else if (cassettePlaying) gameEjectCassette();
+        else                      addLine("Nothing to eject.");
+        break;
 
       // ── VCR ──────────────────────────────────────────────────────────────
-      case 'rewind':                                    vhsPlaying ? addLine('The VCR rewinds. The tape chirps back to the beginning.') : addLine("There's no tape in the VCR."); break;
+      case 'rewind': {
+        const rwTarget = args.join(' ');
+        const rwCassette = /cassette|tape|boombox/.test(rwTarget);
+        const rwVCR      = !rwTarget || /vcr|vhs|video/.test(rwTarget);
+        if (rwCassette || (cassettePlaying && !vhsPlayingId && !rwVCR)) {
+          if (!cassettePlaying) { addLine("There's no tape in the boombox."); break; }
+          if (!boomBoxOn)       { addLine("The boombox is off.");              break; }
+          addLine('You press rewind. The boombox whirs. The tape spools back.');
+        } else {
+          if (!vhsPlayingId) { addLine("There's no tape in the VCR."); break; }
+          if (!vcrOn)        { addLine("The VCR is off.");              break; }
+          addLine('The VCR rewinds. The tape chirps back to the beginning.');
+        }
+        break;
+      }
 
       // ── Records ──────────────────────────────────────────────────────────
       case 'play':                                      gamePlay(args);       break;
