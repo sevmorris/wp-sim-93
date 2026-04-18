@@ -601,7 +601,7 @@ $3`,
   { id:'unlabeled 3',         label:'an unlabeled tape',         shelvedVHS:true, examDesc:"Plain black VHS shell. No label. The tape tab is broken off." },
   { id:'letterman',           label:'a tape labeled "David Letterman"', shelvedVHS:true, examDesc:'Plain black VHS shell. A strip of masking tape on the spine with "DAVID LETTERMAN" written in marker. Home recording off the TV.',
     shortTitle: 'Late Night with David Letterman',
-    listenDesc: 'The VCR hums. Letterman does the Top 10 List. You hear the rain through the open kitchen window.' },
+    listenDesc: 'The VCR hums. Letterman does the Top 10 List. You hear the rain through the cracked kitchen window.' },
 
   // ── Dairy ────────────────────────────────────────────────────────────────
   { id:'half and half', label:'a carton of half & half', inFridge:true,
@@ -954,12 +954,12 @@ const SCENERY = {
       else                                   coffeeBlurb = 'a coffee maker on the counter, carafe still half full';
       return `A small, open kitchen along the east wall. ${coffeeBlurb[0].toUpperCase() + coffeeBlurb.slice(1)}. `
            + 'A cabinet above it. A refrigerator humming against the wall. '
-           + 'A gas range in the southeast corner' + (stoveOn ? ' — one burner lit' : '') + '. A few dishes in the sink.';
+           + 'A gas range in the southeast corner' + (stoveOn ? ' — one burner lit' : '') + '. A small window above it, cracked open. A few dishes in the sink.';
     },
   },
   window: {
-    names: ['window', 'windows', 'north wall', 'street', 'outside'],
-    desc: 'A single window on the north wall. Rain streaking down the glass. A few cars parked along the curb, not much moving.',
+    names: ['window', 'windows', 'outside'],
+    desc: 'A small window in the southeast corner of the kitchen, cracked open an inch or two. Rain on the glass. Warm, damp air drifts in through the gap.',
   },
   quilt: {
     names: ['quilt', 'blanket', 'throw', 'patchwork'],
@@ -2613,9 +2613,9 @@ function gameListen(args) {
       else { addLine(`The VCR hums. ${cap(vhsPlaying)} is on.`); const wd = WATCH_DESC[vhsPlayingId]; if (wd) addLine(wd, 'dim'); }
     } else if (tvOn) {
       addLine("The laugh track from Hogan's Heroes drifts over from the TV.");
-      addLine("Rain against the windows underneath it.", 'dim');
+      addLine("Rain against the kitchen window underneath it.", 'dim');
     } else {
-      addLine("Rain against the windows. The refrigerator hums in the kitchen.");
+      addLine("Rain against the kitchen window. The refrigerator hums.");
     }
     return;
   }
@@ -2655,7 +2655,7 @@ function gameListen(args) {
     return;
   }
   if (/outside|street|window|traffic/.test(target)) {
-    addLine("Rain on the glass. Steady, soft. A car hisses by on the wet street.");
+    addLine("Rain against the kitchen window. Steady. Warm air coming through the crack.");
     return;
   }
   if (/fridge|refrigerator/.test(target)) {
@@ -2757,7 +2757,7 @@ function gameTouch(args) {
   if (/tv|television|screen/.test(word)){ addLine(tvOn ? 'The screen is warm to the touch.' : 'The screen is cold. The TV is off.'); return; }
   if (/lamp/.test(word))                { addLine(lampOn ? 'The shade is warm.' : 'The shade is cool. The lamp is off.'); return; }
   if (/desk/.test(word))                { addLine('Cool metal. A few scratches.'); return; }
-  if (/window/.test(word))              { addLine('Cool. A little drafty at the edge.'); return; }
+  if (/window/.test(word))              { addLine('The glass is cool. Warm, damp air comes through the crack where it\'s open.'); return; }
   if (/record|vinyl/.test(word)) {
     if (recordPlaying && gInventory.some(id => ITEMS.find(i => i.id === id)?.label === recordPlaying))
       addLine("It's spinning. Don't touch the surface.");
