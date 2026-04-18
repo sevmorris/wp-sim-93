@@ -472,11 +472,35 @@ Type  buckingham  to play.
      content   : text shown when they  read  it (optional)
 */
 const ROOM_DESC =
-`A small living room. A metal desk sits against the west wall — a PC on it, monitor glowing blue-gray, an old lamp from Second Mile Thrift Store beside it. In the northwest corner, a small table holds a phone and an answering machine. Records and a turntable line the south wall. An old sofa sits in the middle of the room, facing the television — a cat curled up on one end. Books and a shelf of VHS tapes line the north wall. In the northeast corner, near the door to the back bedroom, a battered boombox sits on a small shelf with a rack of cassettes beside it. The kitchen is open to the east. Rain against the window.`;
+`A small living room. A boxy television sits against the west wall, a VCR stacked underneath. An old sofa sits in the middle of the room, facing it — a cat curled up on one end. Records and a turntable line the south wall. Along the north wall: bookshelves, a VHS shelf, and a metal desk with a PC and printer — then in the northeast corner a battered boombox and a rack of cassettes near the door to the back bedroom. In the northwest corner, a small table holds a phone and an answering machine. The kitchen is open to the east. Rain against the window.`;
 
 const ITEMS = [
 
   // ── Desk items (onDesk: true — visible only when you examine the desk) ───
+  {
+    id:       'billboard',
+    label:    'a copy of Billboard',
+    onDesk:   true,
+    examDesc: 'Billboard, October 2, 1993. The album chart is dog-eared. In Utero circled at number one.',
+    content:
+`BILLBOARD
+The International Newsweekly of Music, Video and Home Entertainment
+October 2, 1993
+
+HOT 100
+  1.  Dreamlover  —  Mariah Carey
+  2.  Whoomp! (There It Is)  —  Tag Team
+  3.  Runaway Train  —  Soul Asylum
+  4.  The River of Dreams  —  Billy Joel
+  5.  If  —  Janet Jackson
+
+BILLBOARD 200 (ALBUMS)
+  1.  In Utero  —  Nirvana                [NEW]
+  2.  janet.  —  Janet Jackson
+  3.  The Bodyguard  —  Soundtrack
+  4.  Black Sunday  —  Cypress Hill
+  5.  Siamese Dream  —  Smashing Pumpkins`,
+  },
   {
     id:       'tmz flyer',
     label:    'a flyer from the printer',
@@ -520,6 +544,13 @@ $3`,
     inCabinet: true,
     roomDesc:  'A ceramic mug is here.',
     examDesc() { return mugFilled ? 'A ceramic mug. Still a little warm.' : 'A plain ceramic mug. Empty.'; },
+  },
+  {
+    id:        'glass',
+    label:     'a drinking glass',
+    inCabinet: true,
+    roomDesc:  'A drinking glass is here.',
+    examDesc() { return glassFilled ? 'A plain drinking glass. Full of water.' : 'A plain drinking glass. Empty.'; },
   },
 
   // ── Records (shelved: true — visible only when you examine the record shelf) ─
@@ -694,8 +725,8 @@ const SCENERY = {
       const onDesk = ITEMS.filter(it => it.onDesk && !gInventory.includes(it.id));
       const listed = onDesk.map(it => it.label).join(', ');
       const surface = listed
-        ? `A metal desk against the west wall. On it: a PC, a dot-matrix printer, and ${listed}.`
-        : 'A metal desk against the west wall. A PC and a dot-matrix printer sit on it.';
+        ? `A metal desk along the north wall. On it: a PC, a dot-matrix printer, and ${listed}.`
+        : 'A metal desk along the north wall. A PC and a dot-matrix printer sit on it.';
       return `${surface} A shallow drawer below the surface.`;
     },
   },
@@ -739,9 +770,9 @@ const SCENERY = {
   tv: {
     names: ['tv', 'television', 'set'],
     desc() {
-      if (!tvOn) return 'A boxy television. The screen is dark. A VCR sits underneath.';
-      if (vhsPlaying) return `A boxy television. The VCR is running — ${vhsPlaying} is on screen.`;
-      return "A boxy television. Channel 17 — Hogan's Heroes. The laugh track echoes off the walls.";
+      if (!tvOn) return 'A boxy television against the west wall. The screen is dark. A VCR sits underneath.';
+      if (vhsPlaying) return `A boxy television against the west wall. The VCR is running — ${vhsPlaying} is on screen.`;
+      return "A boxy television against the west wall. Channel 17 — Hogan's Heroes. The laugh track echoes off the walls.";
     },
     toggle: true,
     turnOn()  {
@@ -777,7 +808,7 @@ const SCENERY = {
           ? "You're sitting on it right now, watching Hogan's Heroes. Cracker is curled up against your leg."
           : "You're sitting on it right now. The TV is dark. Cracker is curled up against your leg.";
       }
-      return 'A beat-up sofa with a quilt thrown over the back, facing the television. Cracker is curled up on one end.';
+      return 'A beat-up sofa with a quilt thrown over the back, facing the TV on the west wall. Cracker is curled up on one end.';
     },
   },
   cat: {
@@ -820,6 +851,12 @@ const SCENERY = {
   jadePalace: {
     names: ['jade palace', 'jade palace menu', 'chinese menu', 'takeout menu', 'menus', 'menu', 'fridge magnets', 'magnets', 'magnet', 'pineapple magnet', 'lo mein'],
     desc: 'Jade Palace Chinese Restaurant. A folded paper menu held up by a magnet shaped like a pineapple. The lo mein is circled in pen.',
+  },
+  waterDispenser: {
+    names: ['water dispenser', 'water cooler', 'water bottle', 'five gallon', '5 gallon', 'water jug', 'jug', 'dispenser', 'cooler', 'water'],
+    desc() {
+      return 'A five-gallon water jug on a plastic dispenser beside the fridge. Blue plastic, a little cloudy. The jug gurgles occasionally on its own.';
+    },
   },
   stove: {
     names: ['stove', 'range', 'burner', 'burners', 'oven', 'stovetop', 'gas stove', 'gas range'],
@@ -1016,6 +1053,7 @@ let tvOn         = false;   // tv state
 let recordPlaying = null;   // label of record currently on turntable
 let cabinetOpen   = false;   // kitchen cabinet state
 let mugFilled     = false;   // whether the mug has coffee in it
+let glassFilled   = false;   // whether the glass has water in it
 let seated        = false;   // player is seated
 let boomBoxOn     = false;   // boombox power state
 let cassettePlaying = null;  // label of cassette currently playing
@@ -1431,6 +1469,7 @@ function startAdventure() {
   recordPlaying = null;
   cabinetOpen     = false;
   mugFilled       = false;
+  glassFilled     = false;
   seated          = false;
   boomBoxOn       = false;
   cassettePlaying = null;
@@ -1982,17 +2021,34 @@ function gameFillMug() {
   addLine('You pour yourself a cup of coffee. Not fresh, but it\'ll do.');
 }
 
+function gameFillGlass() {
+  if (!gInventory.includes('glass')) {
+    addLine("You don't have a glass. Take one from the cabinet first.");
+    return;
+  }
+  if (glassFilled) { addLine('The glass is already full.'); return; }
+  glassFilled = true;
+  addLine('You press the spigot. The water jug gurgles and fills the glass.');
+}
+
 function gameDrink(args) {
   const word = args.join(' ');
   const beerItem = gInventory.map(id => ITEMS.find(i => i.id === id)).find(it => it && it.drinkable);
   const hasCoffee = gInventory.includes('mug') && mugFilled;
+  const hasWater  = gInventory.includes('glass') && glassFilled;
 
   // No argument — default to whatever makes sense
   if (!word) {
     if (beerItem)  { _drinkBeer(beerItem); return; }
     if (hasCoffee) { _drinkCoffee(); return; }
+    if (hasWater)  { _drinkWater(); return; }
     addLine("You don't have anything to drink.");
     return;
+  }
+  if (/water|glass/.test(word)) {
+    if (!gInventory.includes('glass')) { addLine("You don't have a glass. Take one from the cabinet."); return; }
+    if (!glassFilled) { addLine('The glass is empty. Fill it from the water dispenser.'); return; }
+    _drinkWater(); return;
   }
   if (/coffee|mug|cup/.test(word)) {
     if (!gInventory.includes('mug')) { addLine("You don't have a mug."); return; }
@@ -2009,6 +2065,11 @@ function gameDrink(args) {
 function _drinkCoffee() {
   addLine('You take a sip. Lukewarm, a little bitter. Still hits the spot.');
   mugFilled = false;
+}
+
+function _drinkWater() {
+  addLine('Cold and flat. Does the job.');
+  glassFilled = false;
 }
 
 function _drinkBeer(it) {
@@ -2090,7 +2151,14 @@ function gameGo(args) {
     addLine(typeof SCENERY.kitchen.desc === 'function' ? SCENERY.kitchen.desc() : SCENERY.kitchen.desc);
     return;
   }
-  if (/^(west|desk)$/.test(dest)) {
+  if (/^(west|tv|television)$/.test(dest)) {
+    addLine('You walk over to the TV.');
+    addLine('');
+    addLine(typeof SCENERY.tv.desc === 'function' ? SCENERY.tv.desc() : SCENERY.tv.desc);
+    lastScenery = 'tv';
+    return;
+  }
+  if (/^desk$/.test(dest)) {
     playerArea = 'desk';
     addLine('You walk to the desk.');
     addLine('');
@@ -2685,9 +2753,12 @@ function handleGameCommand(raw) {
   else if (cmd === 'stop'  && /vcr|vhs|movie|film|video/.test(rest))   { gameStop(args); }
   else if (cmd === 'watch' && /vcr|vhs|movie|film|video/.test(rest))   { gameWatch(args); }
   else if (cmd === 'lift'  && /needle/.test(rest))                      { gameStop(['needle']); }
-  else if ((cmd === 'fill' || cmd === 'pour') && /mug|cup/.test(rest))  { gameFillMug(); }
-  else if (cmd === 'pour'  && /coffee/.test(rest))                      { gameFillMug(); }
-  else if (cmd === 'get'   && /coffee/.test(rest))                      { gameFillMug(); }
+  else if ((cmd === 'fill' || cmd === 'pour') && /mug|cup/.test(rest))       { gameFillMug(); }
+  else if ((cmd === 'fill' || cmd === 'pour') && /glass|water/.test(rest))   { gameFillGlass(); }
+  else if (cmd === 'get'   && /water/.test(rest))                            { gameFillGlass(); }
+  else if (cmd === 'pour'  && /coffee/.test(rest))                           { gameFillMug(); }
+  else if (cmd === 'get'   && /coffee/.test(rest))                           { gameFillMug(); }
+  else if (cmd === 'drink' && /water|glass/.test(rest))                      { gameDrink(['water']); }
   // ── TV channel / input switching ────────────────────────────────────────
   else if (cmd === 'channel' || (cmd === 'switch' && /channel|input|vcr|aux/.test(rest)) ||
            (cmd === 'tune'   && /channel|vcr|aux/.test(rest))) {
@@ -2767,7 +2838,10 @@ function handleGameCommand(raw) {
       case 'tap': case 'pet':                           gameTouch(args);       break;
 
       // ── Coffee ───────────────────────────────────────────────────────────
-      case 'fill': case 'pour':                         gameFillMug();         break;
+      case 'fill': case 'pour':
+        if (gInventory.includes('glass')) gameFillGlass();
+        else gameFillMug();
+        break;
       case 'drink': case 'sip':                         gameDrink(args);       break;
 
       // ── Cooking ──────────────────────────────────────────────────────────
