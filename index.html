@@ -1830,9 +1830,10 @@ function gameDrop(args) {
 
 function gameRead(args) {
   if (!args.length) {
-    // Infer from a held book
+    // Infer from a held book or inserted floppy
     const heldBook = ITEMS.find(it => it.shelvedBook && gInventory.includes(it.id));
     if (heldBook) { gameRead([heldBook.id]); return; }
+    if (floppyInserted) { gameRead(['floppy']); return; }
     pendingVerb = 'read'; addLine('Read what?'); return;
   }
   const word = args.join(' ');
@@ -1967,7 +1968,18 @@ function gameInventory() {
 
 function gameToggle(args, on) {
   if (!args.length) {
-    // Infer target from last examined/navigated-to scenery
+    // Context-aware inference — pick the most obvious candidate
+    if (on) {
+      if (cassettePlaying && !boomBoxOn)               { findScenery('boombox').turnOn(); return; }
+      if (scrappleInPan   && !stoveOn)                 { findScenery('stove').turnOn();   return; }
+      if (vhsPlaying      && !tvOn)                    { findScenery('tv').turnOn();      return; }
+    } else {
+      if (stoveOn)                                     { findScenery('stove').turnOff();   return; }
+      if (boomBoxOn && cassettePlaying)                { findScenery('boombox').turnOff(); return; }
+      if (tvOn)                                        { findScenery('tv').turnOff();      return; }
+      if (boomBoxOn)                                   { findScenery('boombox').turnOff(); return; }
+    }
+    // Fall back to last examined scenery
     if (lastScenery) {
       const sc = findScenery(lastScenery);
       if (sc && sc.toggle) { on ? sc.turnOn() : sc.turnOff(); return; }
@@ -1984,7 +1996,20 @@ function gameToggle(args, on) {
 }
 
 function gamePlay(args) {
-  if (!args.length) { pendingVerb = 'play'; addLine('Play a record, a tape, or  play messages  for the answering machine.'); return; }
+  if (!args.length) {
+    // Media in hand — just play it
+    const inHand = ITEMS.find(i => (i.shelved || i.shelvedTape || i.shelvedVHS) && gInventory.includes(i.id));
+    if (inHand) { gamePlay([inHand.id]); return; }
+    // Tape loaded in boombox
+    if (cassettePlaying && boomBoxOn)  { addLine(`${cassettePlaying} is playing.`); return; }
+    if (cassettePlaying && !boomBoxOn) { findScenery('boombox').turnOn(); return; }
+    // Record / VHS already going
+    if (recordPlaying) { addLine(`${recordPlaying} is on the turntable.`); return; }
+    if (vhsPlaying)    { addLine(`${cap(vhsPlaying)} is playing.`); return; }
+    pendingVerb = 'play';
+    addLine('Play a record, a tape, or  play messages  for the answering machine.');
+    return;
+  }
   const word = args.join(' ').replace(/^(the\s+|a\s+)/, '');
 
   // Generic play shorthands — find what's in hand
