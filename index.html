@@ -631,6 +631,26 @@ $3`,
     inKitchenDrawer: true,
     examDesc:        'A short paring knife. Wooden handle, slightly worn. Sharp enough.',
   },
+
+  // ── Counter items (onCounter: true — visible on counter, not in room) ────
+  {
+    id:        'coffee can',
+    label:     'a can of Chase & Sanborn coffee',
+    onCounter: true,
+    examDesc:  'Chase & Sanborn ground coffee. A medium-sized can, about half full. The plastic lid is on.',
+  },
+  {
+    id:        'filter box',
+    label:     'a box of coffee filters',
+    onCounter: true,
+    examDesc:  'A box of cone-style coffee filters. Most of a box left.',
+  },
+  {
+    id:        'filter',
+    label:     'a coffee filter',
+    hidden:    true,
+    examDesc:  'A cone-shaped paper coffee filter. Lightweight and papery.',
+  },
 ];
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -834,7 +854,13 @@ const SCENERY = {
   coffeepot: {
     names: ['coffee', 'coffee pot', 'coffeepot', 'coffee maker', 'coffeemaker', 'pot', 'carafe', 'counter', 'countertop'],
     desc() {
-      return 'A drip coffee maker on the counter. The carafe is about half full — not fresh, but not terrible either.';
+      if (coffeePotState === 'fresh')   return 'The coffee maker on the counter. The carafe is full — fresh coffee, still steaming.';
+      if (coffeePotState === 'brewing') return 'The coffee maker is gurgling and hissing. The smell of fresh coffee is building.';
+      if (coffeePotState === 'grounds') return 'The coffee maker on the counter. Carafe empty. Water in the reservoir. Filter and grounds in the basket. Ready to brew — flip the switch.';
+      if (coffeePotState === 'filter')  return 'The coffee maker on the counter. Carafe empty. Water in the reservoir. Filter in the basket. Add the coffee grounds next.';
+      if (coffeePotState === 'water')   return 'The coffee maker on the counter. Carafe empty. Water in the reservoir. Add a filter and grounds next.';
+      if (coffeePotState === 'empty')   return 'The coffee maker on the counter. The carafe is empty. Fill the reservoir with water.';
+      return 'A drip coffee maker on the counter. The carafe is about half full — not fresh, but not terrible either. A can of Chase & Sanborn and a box of filters sit beside it.';
     },
   },
   fridge: {
@@ -916,7 +942,14 @@ const SCENERY = {
   kitchen: {
     names: ['kitchen'],
     desc() {
-      return 'A small, open kitchen along the east wall. A coffee maker on the counter, carafe still half full. '
+      let coffeeBlurb;
+      if      (coffeePotState === 'fresh')   coffeeBlurb = 'fresh coffee in the pot';
+      else if (coffeePotState === 'brewing') coffeeBlurb = 'coffee brewing — the maker is going';
+      else if (coffeePotState === 'empty')   coffeeBlurb = 'a coffee maker on the counter, carafe empty';
+      else if (coffeePotState === 'water' || coffeePotState === 'filter' || coffeePotState === 'grounds')
+                                             coffeeBlurb = 'a coffee maker on the counter — halfway through a fresh pot';
+      else                                   coffeeBlurb = 'a coffee maker on the counter, carafe still half full';
+      return `A small, open kitchen along the east wall. ${coffeeBlurb[0].toUpperCase() + coffeeBlurb.slice(1)}. `
            + 'A cabinet above it. A refrigerator humming against the wall. '
            + 'A gas range in the southeast corner' + (stoveOn ? ' — one burner lit' : '') + '. A few dishes in the sink.';
     },
@@ -1075,6 +1108,8 @@ let kitchenDrawerOpen = false; // kitchen drawer by the fridge
 let stoveOn           = false; // stove burner is lit
 let scrappleInPan     = false; // scrapple has been sliced into the pan
 let scrappleCooked    = false; // scrapple is fully cooked and ready to eat
+let coffeePotState    = 'old'; // 'old'|'empty'|'water'|'filter'|'grounds'|'brewing'|'fresh'
+let brewChecked       = false; // player has checked once while brewing
 let ejectNudged   = false;   // eject nudge has been shown once since reading
 let playerArea    = null;    // rough location: null=general, 'desk', 'sofa', 'kitchen', 'shelf', 'north', 'ne'
 let lastScenery   = null;    // last scenery name — 'it'/'that' resolves to this when no lastItem
@@ -1459,11 +1494,12 @@ function handleCommand(raw) {
 
 // Save each item's original state on first load so logout can restore it
 for (const it of ITEMS) {
-  it._origHidden    = it.hidden    || false;
+  it._origHidden          = it.hidden          || false;
   it._origInCabinet       = it.inCabinet       || false;
   it._origInFridge        = it.inFridge        || false;
   it._origInDrawer        = it.inDrawer        || false;
   it._origInKitchenDrawer = it.inKitchenDrawer || false;
+  it._origOnCounter       = it.onCounter       || false;
 }
 
 function startAdventure() {
@@ -1501,12 +1537,15 @@ function startAdventure() {
   stoveOn           = false;
   scrappleInPan     = false;
   scrappleCooked    = false;
+  coffeePotState    = 'old';
+  brewChecked       = false;
   for (const it of ITEMS) {
     it.hidden          = it._origHidden;
     it.inCabinet       = it._origInCabinet;
     it.inFridge        = it._origInFridge;
     it.inDrawer        = it._origInDrawer;
     it.inKitchenDrawer = it._origInKitchenDrawer;
+    it.onCounter       = it._origOnCounter;
     it.dropped         = false;
   }
 
@@ -1565,7 +1604,7 @@ function gameLook() {
   addLine('');
   // Only show items loose in the room (not stored on any shelf/surface, not hidden)
   const here = ITEMS.filter(it =>
-    !it.hidden && !it.inCabinet && !it.inFridge && !it.inDrawer && !it.inKitchenDrawer &&
+    !it.hidden && !it.inCabinet && !it.inFridge && !it.inDrawer && !it.inKitchenDrawer && !it.onCounter &&
     !gInventory.includes(it.id) &&
     (it.dropped || (!it.onDesk && !it.shelved && !it.shelvedTape && !it.shelvedBook && !it.shelvedVHS)));
   for (const it of here) {
@@ -1639,6 +1678,23 @@ function gameTake(args) {
     return;
   }
 
+  // Filter — take from the box on the counter or held in hand
+  if (/^(filter|a filter|coffee filter|the filter)$/.test(word)) {
+    if (gInventory.includes('filter')) { addLine("You already have a filter."); return; }
+    const box = ITEMS.find(i => i.id === 'filter box');
+    if (!box || (!box.onCounter && !gInventory.includes('filter box'))) {
+      addLine("There are no filters here.");
+      return;
+    }
+    const f = ITEMS.find(i => i.id === 'filter');
+    f.hidden = false;
+    autoStand();
+    gInventory.push('filter');
+    lastItem = 'filter';
+    addLine('You pull a filter from the box.');
+    return;
+  }
+
   // Floppy — special: might be in drive, not just drawer
   if (/^(floppy|floppy disk|disk|the floppy|the disk)$/.test(word)) {
     if (gInventory.includes('floppy')) { addLine("You're already holding it."); return; }
@@ -1666,10 +1722,12 @@ function gameTake(args) {
   const wasInFridge        = it.inFridge;
   const wasInDrawer        = it.inDrawer;
   const wasInKitchenDrawer = it.inKitchenDrawer;
+  const wasOnCounter       = it.onCounter;
   it.inCabinet       = false;
   it.inFridge        = false;
   it.inDrawer        = false;
   it.inKitchenDrawer = false;
+  it.onCounter       = false;
   const wasDrop = it.dropped;
   it.dropped   = false;
   autoStand();
@@ -1681,6 +1739,7 @@ function gameTake(args) {
   else if (wasInFridge)         addLine(`You grab ${it.label} from the fridge.`);
   else if (wasInDrawer)         addLine(`You take ${it.label} from the drawer.`);
   else if (wasInKitchenDrawer)  addLine(`You take ${it.label} from the kitchen drawer.`);
+  else if (wasOnCounter)        addLine(`You take ${it.label} from the counter.`);
   else                          addLine(`You pick up ${it.label}.`);
   lastItem = it.id;
   if (it.takeNote) addLine(it.takeNote, 'dim');
@@ -1856,7 +1915,12 @@ function gameExamine(args) {
 
   // Check scenery first
   const sc = findScenery(word);
-  if (sc) { lastScenery = sc.names[0]; addLine(typeof sc.desc === 'function' ? sc.desc() : sc.desc); return; }
+  if (sc) {
+    lastScenery = sc.names[0];
+    addLine(typeof sc.desc === 'function' ? sc.desc() : sc.desc);
+    if (sc === SCENERY.coffeepot && coffeePotState === 'brewing') checkBrew();
+    return;
+  }
 
   // Then items
   const it = gameItem(word);
@@ -2019,6 +2083,8 @@ function gameOpen(args) {
     return;
   }
   if (/half.*(half|&)/.test(word)) { gameAddHalfAndHalf(); return; }
+  if (/coffee can|chase|sanborn|can of/.test(word)) { addLine("Pry the lid off and scoop the grounds in:  add grounds"); return; }
+  if (/filter box|box of filter|filters/.test(word)) { addLine("Pull one out:  take filter"); return; }
   if (/door/.test(word)) { addLine("You're not going anywhere right now."); return; }
   addLine("You can't open that.");
 }
@@ -2089,8 +2155,116 @@ function gameFillMug() {
     return;
   }
   if (mugFilled) { addLine('The mug is already full.'); return; }
+  if (coffeePotState === 'empty' || coffeePotState === 'water' ||
+      coffeePotState === 'filter' || coffeePotState === 'grounds') {
+    addLine("The carafe is empty. You'll need to make a fresh pot.");
+    return;
+  }
+  if (coffeePotState === 'brewing') {
+    addLine("It's still brewing. Give it a minute.");
+    return;
+  }
   mugFilled = true;
-  addLine('You pour yourself a cup of coffee. Not fresh, but it\'ll do.');
+  if (coffeePotState === 'fresh') {
+    addLine('You pour a cup of fresh coffee. Still hot.');
+  } else {
+    addLine('You pour yourself a cup of coffee.');
+    addLine("That pot's been sitting there a while. You should probably make a fresh one.", 'dim');
+  }
+}
+
+function checkBrew() {
+  if (coffeePotState !== 'brewing') return;
+  if (!brewChecked) {
+    brewChecked = true;
+    addLine('The coffee maker is still gurgling. A few more minutes.');
+    return;
+  }
+  coffeePotState = 'fresh';
+  addLine('The coffee maker clicks off. The carafe is full.');
+  addLine('Fresh coffee.', 'dim');
+}
+
+function gamePourOutCoffee() {
+  if (coffeePotState === 'empty') { addLine('The carafe is already empty.'); return; }
+  if (coffeePotState === 'water' || coffeePotState === 'filter' || coffeePotState === 'grounds') {
+    addLine("The carafe is already empty — you're partway through making a fresh pot.");
+    return;
+  }
+  if (coffeePotState === 'brewing') { addLine("It's brewing. Don't mess with it now."); return; }
+  coffeePotState = 'empty';
+  addLine('You pull out the carafe and pour it into the sink.');
+  addLine('Dark coffee swirls down the drain.', 'dim');
+}
+
+function gameFillCarafe() {
+  if (coffeePotState === 'old' || coffeePotState === 'fresh') {
+    addLine('Pour out the old coffee first.');
+    return;
+  }
+  if (coffeePotState === 'brewing') { addLine("It's already brewing."); return; }
+  if (coffeePotState !== 'empty') { addLine('The water is already in.'); return; }
+  coffeePotState = 'water';
+  addLine('You fill the carafe from the faucet and pour it into the reservoir.');
+  addLine('The water level climbs to the six-cup line.', 'dim');
+}
+
+function gameAddFilter() {
+  if (coffeePotState === 'old' || coffeePotState === 'fresh') {
+    addLine('Pour out the old coffee first.');
+    return;
+  }
+  if (coffeePotState === 'brewing') { addLine("It's already brewing."); return; }
+  if (coffeePotState === 'filter' || coffeePotState === 'grounds') {
+    addLine("There's already a filter in the basket.");
+    return;
+  }
+  if (coffeePotState === 'empty') { addLine('Fill the reservoir with water first.'); return; }
+  if (!gInventory.includes('filter')) {
+    const box = ITEMS.find(i => i.id === 'filter box');
+    if (box && box.onCounter) addLine("You'll need a filter. Take one from the box on the counter.");
+    else                      addLine("You don't have a filter.");
+    return;
+  }
+  gInventory = gInventory.filter(id => id !== 'filter');
+  const f = ITEMS.find(i => i.id === 'filter');
+  if (f) f.hidden = true;
+  coffeePotState = 'filter';
+  addLine('You fold the filter into a cone and set it in the basket.');
+}
+
+function gameAddGrounds() {
+  if (coffeePotState === 'old' || coffeePotState === 'fresh') {
+    addLine('Pour out the old coffee first.');
+    return;
+  }
+  if (coffeePotState === 'brewing') { addLine("It's already brewing."); return; }
+  if (coffeePotState === 'empty')   { addLine('Fill the reservoir with water first.'); return; }
+  if (coffeePotState === 'water')   { addLine('You need a filter in the basket first.'); return; }
+  if (coffeePotState === 'grounds') { addLine("The grounds are already in."); return; }
+  const can = ITEMS.find(i => i.id === 'coffee can');
+  if (!gInventory.includes('coffee can') && !(can && can.onCounter)) {
+    addLine("You need the coffee can. It should be on the counter.");
+    return;
+  }
+  coffeePotState = 'grounds';
+  addLine('You pry off the lid and scoop three measures of grounds into the filter.');
+  addLine('The kitchen fills with the smell of coffee for a moment.', 'dim');
+}
+
+function gameStartBrew() {
+  if (coffeePotState === 'old' || coffeePotState === 'fresh') {
+    addLine("There's already coffee in the pot. Pour it out if you want to make a fresh one.");
+    return;
+  }
+  if (coffeePotState === 'brewing') { addLine("It's already brewing."); return; }
+  if (coffeePotState === 'empty')   { addLine("Add water, a filter, and grounds first."); return; }
+  if (coffeePotState === 'water')   { addLine("Still need a filter and grounds."); return; }
+  if (coffeePotState === 'filter')  { addLine("Still need to add the grounds."); return; }
+  coffeePotState = 'brewing';
+  brewChecked    = false;
+  addLine('You slide the carafe into place and flip the switch.');
+  addLine('The coffee maker clicks, hisses, and starts to gurgle.', 'dim');
 }
 
 function gameFillGlass() {
@@ -2433,7 +2607,9 @@ function gameSmell(args) {
     parts.push('rain coming through the window crack');
     parts.push('old paperbacks');
     if (mugFilled && gInventory.includes('mug')) parts.push('the coffee in your hand');
-    else parts.push('old coffee from the kitchen');
+    else if (coffeePotState === 'fresh')   parts.push('fresh coffee from the kitchen');
+    else if (coffeePotState === 'brewing') parts.push('coffee brewing in the kitchen — getting close');
+    else                                   parts.push('old coffee from the kitchen');
     if (recordPlaying) parts.push('warm vinyl');
     else parts.push('faint vinyl');
     if (tvOn) parts.push('a little dust from the TV');
@@ -2444,9 +2620,12 @@ function gameSmell(args) {
     addLine('Cold and slightly hoppy. Good smell.');
     return;
   }
-  if (/coffee|pot|carafe|maker/.test(target)) {
-    if (mugFilled && gInventory.includes('mug')) addLine('Your mug still has some. Lukewarm now.');
-    else addLine("That coffee smells like it was made a few hours ago. Still tempting.");
+  if (/coffee|pot|carafe|maker|filter/.test(target)) {
+    if (mugFilled && gInventory.includes('mug')) {
+      addLine(coffeePotState === 'fresh' ? 'Fresh and hot in your hand.' : 'Your mug still has some. Lukewarm now.');
+    } else if (coffeePotState === 'fresh')   addLine("Fresh coffee. Still steaming. Get a mug.");
+    else if (coffeePotState === 'brewing')   addLine("It's brewing. The smell is promising.");
+    else                                     addLine("That coffee smells like it was made a few hours ago. Still tempting.");
     return;
   }
   if (/computer|pc|windows|monitor|keyboard|dos/.test(target)) {
@@ -2548,7 +2727,19 @@ function gameUse(args) {
   if (/turntable|player/.test(word))      { addLine('Try:  play <record name>'); return; }
   if (/cassette|tape/.test(word))         { addLine('Try:  play <cassette name>'); return; }
   if (/mug|cup/.test(word))               { addLine(mugFilled ? 'Try:  drink' : 'Try:  fill mug'); return; }
-  if (/coffee|pot/.test(word))            { addLine('Try:  fill mug'); return; }
+  if (/coffee can|can of/.test(word))     { addLine('Try:  add grounds'); return; }
+  if (/filter box|box of filter/.test(word)) { addLine('Try:  take filter'); return; }
+  if (/^filter$/.test(word))              { addLine(gInventory.includes('filter') ? 'Try:  add filter' : 'Try:  take filter'); return; }
+  if (/coffee|pot|carafe|maker/.test(word)) {
+    if      (coffeePotState === 'fresh')   addLine('Try:  fill mug');
+    else if (coffeePotState === 'brewing') addLine('The coffee maker is running. Try:  wait');
+    else if (coffeePotState === 'grounds') addLine('Ready to brew. Try:  brew');
+    else if (coffeePotState === 'filter')  addLine('Try:  add grounds');
+    else if (coffeePotState === 'water')   addLine('Try:  take filter, add filter');
+    else if (coffeePotState === 'empty')   addLine('Try:  fill carafe');
+    else                                   addLine('Try:  fill mug  (or pour out coffee to make a fresh pot)');
+    return;
+  }
   if (/cabinet|cupboard/.test(word))      { addLine(cabinetOpen ? 'The cabinet is open.' : 'Try:  open cabinet'); return; }
   if (/fridge|refrigerator/.test(word))   { addLine(fridgeOpen ? 'The fridge is open.' : 'Try:  open fridge'); return; }
   if (/beer/.test(word))                  { addLine(fridgeOpen ? 'Try:  take beer' : 'Try:  open fridge'); return; }
@@ -2816,6 +3007,8 @@ function handleGameCommand(raw) {
   else if (cmd === 'pick'  && args[0] === 'up')                         { gameTake(args.slice(1)); }
   else if (cmd === 'put'   && args[0] === 'down')                       { gameDrop(args.slice(1)); }
   else if (cmd === 'put'   && /on (the )?turntable/.test(rest))         { gamePlay(rest.replace(/\s*on (the )?turntable/, '').trim().split(' ')); }
+  else if (cmd === 'turn'  && args[0] === 'on'  && /coffee|maker|coffeemaker/.test(args.slice(1).join(' '))) { gameStartBrew(); }
+  else if (cmd === 'turn'  && args[0] === 'off' && /coffee|maker|coffeemaker/.test(args.slice(1).join(' '))) { addLine(coffeePotState === 'brewing' ? "It's already going. Let it finish." : "The coffee maker is off."); }
   else if (cmd === 'turn'  && args[0] === 'on')                         { gameToggle(args.slice(1), true); }
   else if (cmd === 'turn'  && args[0] === 'off')                        { gameToggle(args.slice(1), false); }
   else if (cmd === 'turn'  && args[args.length - 1] === 'on')           { gameToggle(args.slice(0, -1), true); }
@@ -2861,6 +3054,22 @@ function handleGameCommand(raw) {
   else if (cmd === 'pour'  && /coffee/.test(rest) && !gInventory.includes('half and half')) { gameFillMug(); }
   else if (cmd === 'get'   && /coffee/.test(rest))                           { gameFillMug(); }
   else if (cmd === 'drink' && /water|glass/.test(rest))                      { gameDrink(['water']); }
+  // ── Fresh coffee steps ───────────────────────────────────────────────────
+  else if ((cmd === 'pour' || cmd === 'dump' || cmd === 'empty' || cmd === 'discard') &&
+           /coffee|pot|carafe|old/.test(rest))                               { gamePourOutCoffee(); }
+  else if (cmd === 'fill' && /carafe|pot|reservoir|maker|coffee maker/.test(rest)) { gameFillCarafe(); }
+  else if (cmd === 'fill' && /water/.test(rest) && /carafe|pot|reservoir/.test(rest)) { gameFillCarafe(); }
+  else if ((cmd === 'add' || cmd === 'put' || cmd === 'place' || cmd === 'insert') &&
+           /filter/.test(rest) && /basket|maker|coffee|pot/.test(rest))      { gameAddFilter(); }
+  else if ((cmd === 'add' || cmd === 'put' || cmd === 'place') &&
+           /filter/.test(rest) && !rest.includes('box'))                     { gameAddFilter(); }
+  else if ((cmd === 'add' || cmd === 'put' || cmd === 'scoop' || cmd === 'measure') &&
+           /ground|coffee|grounds/.test(rest))                               { gameAddGrounds(); }
+  else if ((cmd === 'start' || cmd === 'brew' || cmd === 'run' || cmd === 'switch') &&
+           /coffee|brew|maker|pot/.test(rest))                               { gameStartBrew(); }
+  else if (cmd === 'flip' && /switch|maker|coffee/.test(rest))               { gameStartBrew(); }
+  else if (cmd === 'brew' && !rest)                                           { gameStartBrew(); }
+  else if (cmd === 'check' && /coffee|brew|pot|carafe|maker/.test(rest))     { checkBrew(); }
   // ── TV channel / input switching ────────────────────────────────────────
   else if (cmd === 'channel' || (cmd === 'switch' && /channel|input|vcr|aux/.test(rest)) ||
            (cmd === 'tune'   && /channel|vcr|aux/.test(rest))) {
@@ -2954,7 +3163,10 @@ function handleGameCommand(raw) {
       case 'use':                                       gameUse(args);         break;
       case 'inventory': case 'i': case 'inv':
       case 'items': case 'carrying':                    gameInventory();       break;
-      case 'wait': case 'z':                            addLine('Time passes.'); break;
+      case 'wait': case 'z':
+        addLine('Time passes.');
+        if (coffeePotState === 'brewing') checkBrew();
+        break;
       case 'turn':                                      addLine('Turn what on or off?'); break;
 
       // ── Physics ──────────────────────────────────────────────────────────
