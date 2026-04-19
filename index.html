@@ -1638,7 +1638,10 @@ function gameLook() {
 }
 
 function gameTake(args) {
-  if (!args.length) { pendingVerb = 'take'; addLine('Take what?'); return; }
+  if (!args.length) {
+    if (lastItem) { gameTake([lastItem]); return; }
+    pendingVerb = 'take'; addLine('Take what?'); return;
+  }
   const word = args.join(' ');
 
   // Taking a single pen from the desk cup
@@ -1767,7 +1770,10 @@ function gameTake(args) {
 }
 
 function gameDrop(args) {
-  if (!args.length) { pendingVerb = 'drop'; addLine('Drop what?'); return; }
+  if (!args.length) {
+    if (lastItem && gInventory.includes(lastItem)) { gameDrop([lastItem]); return; }
+    pendingVerb = 'drop'; addLine('Drop what?'); return;
+  }
   // Strip trailing filler words ("put record back", "put it down", "put away")
   let raw = args.join(' ').replace(/\s+(back|away|down|there|here)$/, '').trim();
 
@@ -2088,7 +2094,11 @@ function gamePlay(args) {
 }
 
 function gameOpen(args) {
-  if (!args.length) { pendingVerb = 'open'; addLine('Open what?'); return; }
+  if (!args.length) {
+    if (lastItem) { gameOpen([lastItem]); return; }
+    if (lastScenery) { gameOpen([lastScenery]); return; }
+    pendingVerb = 'open'; addLine('Open what?'); return;
+  }
   autoStand();
   while (args.length && (args[0] === 'the' || args[0] === 'a')) args = args.slice(1);
   const word = args.join(' ');
@@ -2224,6 +2234,7 @@ function gameFillMug() {
     mugHasFreshCoffee = true;
     addLine('You pour a cup of fresh coffee. Still hot.');
   } else {
+    mugHasFreshCoffee = false;
     addLine('You pour yourself a cup of coffee.');
     addLine("That pot's been sitting there a while. You should probably make a fresh one.", 'dim');
   }
@@ -2244,8 +2255,9 @@ function checkBrew() {
 function gameDumpMug() {
   if (!gInventory.includes('mug')) { addLine("You don't have a mug."); return; }
   if (!mugFilled) { addLine("The mug is already empty."); return; }
-  mugFilled  = false;
-  mugHasHalf = false;
+  mugFilled        = false;
+  mugHasHalf       = false;
+  mugHasFreshCoffee = false;
   addLine('You pour the coffee down the sink. The mug is empty.');
 }
 
@@ -3278,7 +3290,8 @@ function handleGameCommand(raw) {
         if      (gInventory.includes('floppy'))  gameInsertFloppy();
         else if (hasNonPlayingVHS)               gameInsertVHS();
         else if (hasUnloadedTape)                gameInsertCassette();
-        else                                     gameInsertFloppy();
+        else if (floppyInserted)                 addLine("The disk is already in the drive.");
+        else                                     addLine("You're not holding anything to insert.");
         break;
       }
       case 'eject':  case 'remove':
