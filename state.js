@@ -160,12 +160,12 @@ export const ContextManager = (() => {
   const AREA_SCENERY = {
     desk:    ['desk', 'drawer', 'pc', 'computer', 'monitor', 'printer'],
     kitchen: ['fridge', 'refrigerator', 'stove', 'counter', 'cabinet',
-              'sink', 'coffee maker', 'coffee pot', 'kitchen drawer'],
+              'sink', 'coffee maker', 'coffee pot', 'kitchen drawer', 'pan', 'skillet'],
     shelf:   ['record shelf', 'shelf', 'turntable'],
-    ne:      ['boombox', 'cassette shelf', 'cassette rack'],
+    ne:      ['boombox', 'cassette shelf', 'cassette rack', 'bedroom door'],
     north:   ['bookshelf', 'bookshelves', 'vhs shelf', 'phone',
               'answering machine', 'small table'],
-    sofa:    ['sofa', 'couch'],
+    sofa:    ['sofa', 'couch', 'tv', 'television', 'vcr', 'vhs player', 'cat', 'cracker'],
   };
 
   function areaOf(id) {
@@ -288,15 +288,16 @@ export const ContextManager = (() => {
   }
 
   // canInteract: checks reachability of id from the current GameState.playerArea.
-  // If autoMove is true (default), navigates there transparently and returns true.
+  // If autoMove is true, navigates there transparently and returns true.
+  // Returns true if reachable, or the home area name (string) if unreachable.
   // Items in GameState.gInventory are always reachable regardless of area.
-  function canInteract(id, autoMove = true) {
+  function canInteract(id, autoMove = false) {
     if (!id) return true;
     if (GameState.gInventory.includes(id)) return true;
     const home = homeAreaOf(id);
     if (!home || home === GameState.playerArea) return true;
     if (autoMove) { autoNavigate(home); return true; }
-    return false;
+    return home;
   }
 
   return {

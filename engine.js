@@ -4,6 +4,21 @@ import { SystemState, GameState, ContextManager } from './state.js';
 import { addLine, clearOutput, cap, normPath, resolvePath, children, decryptLetter, outputEl, promptEl, inputEl, panelEl } from './utils.js';
 import { ROOM_DESC, ITEMS, WATCH_DESC, LISTEN_DESC, READ_DESC, SCENERY } from './world.js';
 
+const AREA_NAMES = {
+  desk:    'desk',
+  kitchen: 'kitchen',
+  shelf:   'record shelf',
+  ne:      'northeast corner',
+  north:   'north shelves',
+  sofa:    'sofa',
+};
+
+function ensureArea(area) {
+  if (!area || GameState.playerArea === area) return true;
+  addLine(`You'll need to head over to the ${AREA_NAMES[area] || area} for that.`);
+  return false;
+}
+
 
 
 // ── Status panel ──────────────────────────────────────────────────────────
@@ -405,6 +420,7 @@ function gameTake(args) {
 
   // Phone receiver
   if (/^(phone|telephone|receiver|handset|the phone|the receiver)$/.test(word)) {
+    if (!ensureArea('north')) return;
     addLine('You pick up the receiver. Dial tone.');
     ContextManager.setFocus('phone', 'scenery');
     return;
@@ -412,6 +428,7 @@ function gameTake(args) {
 
   // Taking a single pen from the desk cup
   if (/^(pen|pens|a pen|the pen|the pens)$/.test(word)) {
+    if (!ensureArea('desk')) return;
     if (GameState.gInventory.includes('pen')) { addLine("You already have a pen."); return; }
     const penItem = ITEMS.find(it => it.id === 'pen');
     penItem.hidden = false;
@@ -424,6 +441,7 @@ function gameTake(args) {
 
   // Generic "record"
   if (/^(record|a record|the record)$/.test(word)) {
+    if (!ensureArea('shelf')) return;
     const available = ITEMS.filter(it => it.shelved && !GameState.gInventory.includes(it.id) && !it.dropped);
     if (!available.length) { addLine('There are no records left on the shelf.'); return; }
     if (available.length === 1) { autoStand(); GameState.gInventory.push(available[0].id); ContextManager.setFocus(available[0].id, 'item'); addLine(`You take ${available[0].label} off the shelf.`); }
@@ -433,6 +451,7 @@ function gameTake(args) {
 
   // Generic "cassette" / "tape"
   if (/^(cassette|tape|a cassette|a tape)$/.test(word)) {
+    if (!ensureArea('ne')) return;
     const available = ITEMS.filter(it => it.shelvedTape && !GameState.gInventory.includes(it.id) && !it.dropped);
     if (!available.length) { addLine('There are no cassettes on the shelf.'); return; }
     if (available.length === 1) { autoStand(); GameState.gInventory.push(available[0].id); ContextManager.setFocus(available[0].id, 'item'); addLine(`You take ${available[0].label} from the rack.`); }
@@ -442,6 +461,7 @@ function gameTake(args) {
 
   // Generic "vhs" / "video tape"
   if (/^(vhs|video|vhs tape|a vhs|the vhs|video tape|a video|a video tape)$/.test(word)) {
+    if (!ensureArea('north')) return;
     const available = ITEMS.filter(it => it.shelvedVHS && !GameState.gInventory.includes(it.id) && !it.dropped);
     if (!available.length) { addLine('There are no VHS tapes on the shelf.'); return; }
     if (available.length === 1) { autoStand(); GameState.gInventory.push(available[0].id); ContextManager.setFocus(available[0].id, 'item'); addLine(`You take ${available[0].label} off the shelf.`); }
@@ -451,6 +471,7 @@ function gameTake(args) {
 
   // Generic "book"
   if (/^(book|a book|the book)$/.test(word)) {
+    if (!ensureArea('north')) return;
     const available = ITEMS.filter(it => it.shelvedBook && !GameState.gInventory.includes(it.id) && !it.dropped);
     if (!available.length) { addLine('There are no books left on the shelf.'); return; }
     if (available.length === 1) { autoStand(); GameState.gInventory.push(available[0].id); ContextManager.setFocus(available[0].id, 'item'); addLine(`You take ${available[0].label} off the shelf.`); }
@@ -460,6 +481,7 @@ function gameTake(args) {
 
   // Generic "beer"
   if (/^(beer|a beer|the beer)$/.test(word)) {
+    if (!ensureArea('kitchen')) return;
     if (!GameState.fridgeOpen) { addLine('The fridge is closed.'); return; }
     const available = ITEMS.filter(it => it.inFridge && it.drinkable && !GameState.gInventory.includes(it.id));
     if (!available.length) { addLine("There's no beer left."); return; }
@@ -470,6 +492,7 @@ function gameTake(args) {
 
   // Filter — take from the box on the counter or held in hand
   if (/^(filter|a filter|coffee filter|the filter)$/.test(word)) {
+    if (!ensureArea('kitchen')) return;
     if (GameState.gInventory.includes('filter')) { addLine("You already have a filter."); return; }
     const box = ITEMS.find(i => i.id === 'filter box');
     if (!box || (!box.onCounter && !GameState.gInventory.includes('filter box'))) {
@@ -487,6 +510,7 @@ function gameTake(args) {
 
   // Floppy — special: might be in drive, not just drawer
   if (/^(floppy|floppy disk|disk|the floppy|the disk)$/.test(word)) {
+    if (!ensureArea('desk')) return;
     if (GameState.gInventory.includes('floppy')) { addLine("You're already holding it."); return; }
     if (GameState.floppyInserted) { addLine('The disk is in the drive. Eject it first.'); return; }
     const fl = ITEMS.find(it => it.id === 'floppy');
@@ -536,6 +560,13 @@ function gameTake(args) {
   const it = gameItem(word);
   if (!it || it.hidden)           { addLine("You don't see that here.");      return; }
   if (GameState.gInventory.includes(it.id)) { addLine("You're already carrying that."); return; }
+
+  const reach = ContextManager.canInteract(it.id);
+  if (reach !== true) {
+    addLine(`You'll need to head over to the ${AREA_NAMES[reach] || reach} to get that.`);
+    return;
+  }
+
   if (it.inCabinet       && !GameState.cabinetOpen)       { addLine("The cabinet is closed."); return; }
   if (it.inFridge        && !GameState.fridgeOpen)         { addLine("The fridge is closed."); return; }
   if (it.inDrawer        && !GameState.drawerOpen)         { addLine("The drawer is closed."); return; }
@@ -686,8 +717,11 @@ function gameRead(args) {
 
   const it = gameItem(word);
   if (!it || it.hidden) { addLine("You don't see that here."); return; }
-  // Auto-navigate if the item is in another area (narrative-only; no access gates for on-surface items)
-  ContextManager.canInteract(it.id);
+  const reach = ContextManager.canInteract(it.id);
+  if (reach !== true) {
+    addLine(`You'll need to head over to the ${AREA_NAMES[reach] || reach} to read that.`);
+    return;
+  }
   if (it.inCabinet       && !GameState.cabinetOpen)       { addLine("You don't see that here."); return; }
   if (it.inFridge        && !GameState.fridgeOpen)        { addLine("You don't see that here."); return; }
   if (it.inDrawer        && !GameState.drawerOpen)        { addLine("You don't see that here."); return; }
@@ -779,6 +813,11 @@ function gameExamine(args) {
   // Check scenery first — push to FocusStack with co-visible children
   const sc = findScenery(word);
   if (sc) {
+    const scArea = ContextManager.areaOf(sc.names[0]);
+    if (scArea && GameState.playerArea !== scArea) {
+      addLine(`You'll need to head over to the ${AREA_NAMES[scArea] || scArea} to see that better.`);
+      return;
+    }
     ContextManager.setFocus(sc.names[0], 'scenery', sceneChildren(sc));
     addLine(typeof sc.desc === 'function' ? sc.desc() : sc.desc);
     if (sc === SCENERY.coffeepot && GameState.coffeePotState === 'brewing') checkBrew();
@@ -793,7 +832,11 @@ function gameExamine(args) {
   if (it.inFridge        && !GameState.fridgeOpen        && !GameState.gInventory.includes(it.id)) { addLine("You don't see that here."); return; }
   if (it.inKitchenDrawer && !GameState.kitchenDrawerOpen && !GameState.gInventory.includes(it.id)) { addLine("You don't see that here."); return; }
   if (it.id === 'scrapple' && GameState.scrappleInPan && !GameState.gInventory.includes('scrapple')) { /* in pan — still examinable */ }
-  ContextManager.canInteract(it.id);   // auto-navigate if item is in another area
+  const reach = ContextManager.canInteract(it.id);
+  if (reach !== true) {
+    addLine(`You'll need to head over to the ${AREA_NAMES[reach] || reach} to see that better.`);
+    return;
+  }
   ContextManager.setFocus(it.id, 'item');
   addLine(typeof it.examDesc === 'function' ? it.examDesc() : it.examDesc);
   if (it.examThought) addLine(it.examThought, 'dim');
@@ -834,6 +877,13 @@ function gameToggle(args, on) {
   const word = args.join(' ');
   const sc   = findScenery(word);
   if (!sc || !sc.toggle) { addLine(`You can't turn that ${on ? 'on' : 'off'}.`); return; }
+
+  const scArea = ContextManager.areaOf(sc.names[0]);
+  if (scArea && GameState.playerArea !== scArea) {
+    addLine(`You'll need to head over to the ${AREA_NAMES[scArea] || scArea} to do that.`);
+    return;
+  }
+
   if (on)  sc.turnOn();
   else     sc.turnOff();
 }
@@ -888,6 +938,7 @@ function gamePlay(args) {
   if (!it) { addLine("You don't have that."); return; }
 
   if (it.shelvedVHS) {
+    if (!ensureArea('sofa')) return;
     if (!GameState.gInventory.includes(it.id)) { addLine(`Take ${it.label} off the shelf first.`); return; }
     if (GameState.vhsPlayingId === it.id) { addLine(`That tape is already in the VCR.`); return; }
     if (GameState.vhsPlaying) addLine(`You swap out ${GameState.vhsPlaying} and slot in ${it.label}.`);
@@ -914,6 +965,7 @@ function gamePlay(args) {
   }
 
   if (it.shelvedTape) {
+    if (!ensureArea('ne')) return;
     if (!GameState.gInventory.includes(it.id)) { addLine(`Take ${it.label} from the rack first.`); return; }
     if (GameState.cassettePlaying === it.label) { addLine(GameState.boomBoxOn ? `${it.label} is already playing.` : `${it.label} is already loaded.`); return; }
     if (GameState.cassettePlaying) addLine(`You swap out ${GameState.cassettePlaying} and pop in ${it.label}.`);
@@ -926,6 +978,7 @@ function gamePlay(args) {
   }
 
   if (it.shelved) {
+    if (!ensureArea('shelf')) return;
     if (!GameState.gInventory.includes(it.id)) { addLine(`Take ${it.label} off the shelf first.`); return; }
     if (GameState.recordPlaying === it.label) { addLine(`${it.label} is already on the turntable.`); return; }
     if (GameState.recordPlaying) addLine(`You lift the needle off ${GameState.recordPlaying} and put on ${it.label}.`);
@@ -1031,6 +1084,7 @@ function gameOpen(args) {
 }
 
 function gameInsertFloppy() {
+  if (!ensureArea('desk')) return;
   autoStand();
   if (GameState.floppyInserted) { addLine('The disk is already in the drive.'); return; }
   if (!GameState.gInventory.includes('floppy')) { addLine("You don't have the floppy disk."); return; }
@@ -1042,6 +1096,7 @@ function gameInsertFloppy() {
 }
 
 function gameInsertVHS() {
+  if (!ensureArea('sofa')) return;
   autoStand();
   if (!GameState.vcrOn) { addLine('The VCR is off. Turn it on first.'); return; }
   if (GameState.vhsPlayingId) { addLine("There's already a tape in the VCR. Eject it first."); return; }
@@ -1051,12 +1106,14 @@ function gameInsertVHS() {
 }
 
 function gameInsertCassette() {
+  if (!ensureArea('ne')) return;
   const tape = ITEMS.find(i => i.shelvedTape && GameState.gInventory.includes(i.id));
   if (!tape) { addLine("You're not holding a cassette tape."); return; }
   gamePlay([tape.id]);
 }
 
 function gameEjectFloppy() {
+  if (!ensureArea('desk')) return;
   autoStand();
   if (!GameState.floppyInserted) { addLine("There's no disk in the drive."); return; }
   GameState.floppyInserted = false;
@@ -1074,6 +1131,7 @@ function gameEjectFloppy() {
 }
 
 function gamePlayMessage() {
+  if (!ensureArea('north')) return;
   if (GameState.messageHeard) {
     addLine('You press play. The machine rewinds briefly.');
     addLine('');
@@ -1092,6 +1150,7 @@ function gamePlayMessage() {
 }
 
 function gameFillMug() {
+  if (!ensureArea('kitchen')) return;
   if (!GameState.gInventory.includes('mug')) {
     const mug = ITEMS.find(i => i.id === 'mug');
     if (mug && mug.dropped) addLine("Pick up the mug first.");
@@ -1134,6 +1193,7 @@ function checkBrew() {
 }
 
 function gameDumpMug() {
+  if (!ensureArea('kitchen')) return;
   if (!GameState.gInventory.includes('mug')) { addLine("You don't have a mug."); return; }
   if (!GameState.mugFilled) { addLine("The mug is already empty."); return; }
   GameState.mugFilled        = false;
@@ -1164,6 +1224,7 @@ function gameThrowAway(args) {
 }
 
 function gamePourOutCoffee() {
+  if (!ensureArea('kitchen')) return;
   if (GameState.coffeePotState === 'empty') {
     addLine('The carafe is already empty.');
     if (GameState.mugFilled) addLine('Your mug still has old coffee in it.', 'dim');
@@ -1182,6 +1243,7 @@ function gamePourOutCoffee() {
 }
 
 function gameFillCarafe() {
+  if (!ensureArea('kitchen')) return;
   if (GameState.coffeePotState === 'old' || GameState.coffeePotState === 'fresh') {
     addLine('Pour out the old coffee first.');
     return;
@@ -1195,6 +1257,7 @@ function gameFillCarafe() {
 }
 
 function gameAddFilter() {
+  if (!ensureArea('kitchen')) return;
   if (GameState.coffeePotState === 'old' || GameState.coffeePotState === 'fresh') {
     addLine('Pour out the old coffee first.');
     return;
@@ -1220,6 +1283,7 @@ function gameAddFilter() {
 }
 
 function gameAddGrounds() {
+  if (!ensureArea('kitchen')) return;
   if (GameState.coffeePotState === 'old' || GameState.coffeePotState === 'fresh') {
     addLine('Pour out the old coffee first.');
     return;
@@ -1244,6 +1308,7 @@ function gameAddGrounds() {
 }
 
 function gameStartBrew() {
+  if (!ensureArea('kitchen')) return;
   if (GameState.coffeePotState === 'old' || GameState.coffeePotState === 'fresh') {
     addLine("There's already coffee in the pot. Pour it out if you want to make a fresh one.");
     return;
@@ -1260,6 +1325,7 @@ function gameStartBrew() {
 }
 
 function gameFillGlass() {
+  if (!ensureArea('kitchen')) return;
   if (!GameState.gInventory.includes('glass')) {
     addLine("You don't have a glass. Take one from the cabinet first.");
     return;
@@ -1314,7 +1380,8 @@ function _drinkCoffee() {
 }
 
 function gameAddHalfAndHalf() {
-  if (!GameState.gInventory.includes('mug'))            { addLine("You don't have a mug."); return; }
+  if (!ensureArea('kitchen')) return;
+  if (!GameState.gInventory.includes('mug')) { addLine("You don't have a mug."); return; }
   if (!GameState.mugFilled)                             { addLine("Pour some coffee first."); return; }
   if (GameState.mugHasHalf)                             { addLine("Already in there."); return; }
   const it = ITEMS.find(i => i.id === 'half and half');
@@ -1497,6 +1564,7 @@ function gameGo(args) {
 }
 
 function gameWatch(args) {
+  if (!ensureArea('sofa')) return;
   const target = (args || []).join(' ');
   if (target && !/tv|television|set|show|hogan|screen|vcr|vhs|movie|film|video/.test(target)) {
     addLine("Watch what?");
@@ -1520,35 +1588,10 @@ function gameWatch(args) {
 function gameListen(args) {
   const target = (args || []).join(' ');
   if (!target || target === 'to') {
-    if (GameState.scrappleInPan && GameState.stoveOn && !GameState.scrappleCooked) {
-      addLine('The scrapple sizzles in the pan. A steady, satisfying sound from the kitchen.');
-      if (GameState.recordPlaying || GameState.cassettePlaying) addLine('Music underneath it.');
-      return;
-    }
-    if (GameState.recordPlaying && GameState.cassettePlaying) {
-      addLine(`Both the turntable (${GameState.recordPlaying}) and the boombox (${GameState.cassettePlaying}) are going. It's a lot.`);
-    } else if (GameState.recordPlaying) {
-      const rec = ITEMS.find(i => i.label === GameState.recordPlaying && i.shelved);
-      addLine(`${GameState.recordPlaying} is on the turntable.`);
-      if (rec && LISTEN_DESC[rec.id]) addLine(LISTEN_DESC[rec.id], 'dim');
-      else addLine('The record crackles softly between songs.', 'dim');
-    } else if (GameState.cassettePlaying) {
-      const tape = ITEMS.find(i => i.label === GameState.cassettePlaying && i.shelvedTape);
-      addLine(`${GameState.cassettePlaying} is playing on the boombox.`);
-      if (tape && LISTEN_DESC[tape.id]) addLine(LISTEN_DESC[tape.id], 'dim');
-    } else if (GameState.tvOn && GameState.vhsPlaying) {
-      const vhsIt = ITEMS.find(i => i.id === GameState.vhsPlayingId);
-      if (vhsIt?.listenDesc) { addLine(vhsIt.listenDesc, 'dim'); }
-      else { addLine(`The VCR hums. ${cap(GameState.vhsPlaying)} is on.`); const wd = WATCH_DESC[GameState.vhsPlayingId]; if (wd) addLine(wd, 'dim'); }
-    } else if (GameState.tvOn) {
-      addLine("The laugh track from Hogan's Heroes drifts over from the TV.");
-      addLine("Rain through the open kitchen window underneath it.", 'dim');
-    } else {
-      addLine("Rain through the open kitchen window. The refrigerator hums.");
-    }
-    return;
+    // ... no area check for general listening
   }
   if (/record|turntable|vinyl|needle/.test(target)) {
+    if (!ensureArea('shelf')) return;
     if (GameState.recordPlaying) {
       const rec = ITEMS.find(i => i.label === GameState.recordPlaying && i.shelved);
       addLine(`${GameState.recordPlaying} is on the turntable.`);
@@ -1560,6 +1603,7 @@ function gameListen(args) {
     return;
   }
   if (/boombox|boom box|cassette|tape|stereo/.test(target)) {
+    if (!ensureArea('ne')) return;
     if (GameState.cassettePlaying) {
       const tape = ITEMS.find(i => i.label === GameState.cassettePlaying && i.shelvedTape);
       addLine(`${GameState.cassettePlaying} is playing on the boombox.`);
@@ -1572,6 +1616,7 @@ function gameListen(args) {
     return;
   }
   if (/tv|television|set|vcr|vhs/.test(target)) {
+    if (!ensureArea('sofa')) return;
     if (!GameState.tvOn) {
       addLine("The TV is off.");
     } else if (GameState.vhsPlaying) {
@@ -1583,19 +1628,13 @@ function gameListen(args) {
     }
     return;
   }
-  if (/outside|street|window|traffic/.test(target)) {
-    addLine("Rain through the open kitchen window. Steady. Warm air coming through the crack.");
-    return;
-  }
   if (/fridge|refrigerator/.test(target)) {
+    if (!ensureArea('kitchen')) return;
     addLine("A low hum from the kitchen. Always on.");
     return;
   }
-  if (/cat|cracker|kitty/.test(target)) {
-    addLine(GameState.seated ? 'A slow, faint purr. She\'s out cold.' : 'Slow breathing. Maybe a faint purr.');
-    return;
-  }
   if (/stove|pan|skillet|scrapple|sizzl/.test(target)) {
+    if (!ensureArea('kitchen')) return;
     if (GameState.scrappleInPan && GameState.stoveOn && !GameState.scrappleCooked) addLine("A steady sizzle. It's working.");
     else if (GameState.scrappleCooked)                         addLine('Quiet now. The scrapple is done.');
     else                                             addLine("Nothing. The stove is off.");
@@ -1783,6 +1822,7 @@ function gameUse(args) {
 }
 
 function gamePutInPan(args) {
+  if (!ensureArea('kitchen')) return;
   // "put scrapple in pan" / "add scrapple to pan" / "slice scrapple"
   if (GameState.scrappleInPan)  { addLine("The scrapple is already in the pan."); return; }
   if (GameState.scrappleCooked) { addLine("The scrapple is cooked. Eat it."); return; }
@@ -1811,6 +1851,7 @@ function gamePutInPan(args) {
 }
 
 function gameCook(args) {
+  if (!ensureArea('kitchen')) return;
   const word = (args || []).join(' ');
   if (word && !/^(scrapple|breakfast|it|some scrapple|the scrapple)$/.test(word)) {
     addLine("Cook what?"); return;
@@ -1839,6 +1880,7 @@ function gameCook(args) {
 }
 
 function gameEat(args) {
+  if (!ensureArea('kitchen')) return;
   const word = (args || []).join(' ');
   if (!word || /^(scrapple|breakfast|it|the scrapple|some scrapple)$/.test(word)) {
     if (GameState.scrappleCooked) {
@@ -1900,26 +1942,29 @@ function gameStop(args) {
   const isGeneric   = !target || /music|playing|sound/.test(target);
 
   if (isVCR || (isGeneric && GameState.vhsPlaying && !GameState.recordPlaying && !GameState.cassettePlaying)) {
+    if (!ensureArea('sofa')) return;
     if (!GameState.vhsPlaying) { addLine("The VCR isn't playing anything."); return; }
     const was = GameState.vhsPlaying; GameState.vhsPlaying = null; GameState.vhsPlayingId = null;
     addLine(`You stop the VCR. ${cap(was)} winds down.`);
     return;
   }
   if (isTurntable || (isGeneric && GameState.recordPlaying && !GameState.cassettePlaying)) {
+    if (!ensureArea('shelf')) return;
     if (!GameState.recordPlaying) { addLine("The turntable isn't playing."); return; }
     const was = GameState.recordPlaying; GameState.recordPlaying = null;
     addLine(`You lift the needle. ${was} stops.`);
     return;
   }
   if (isBoombox || (isGeneric && GameState.cassettePlaying && !GameState.recordPlaying)) {
+    if (!ensureArea('ne')) return;
     if (!GameState.cassettePlaying) { addLine("The boombox isn't playing anything."); return; }
     const was = GameState.cassettePlaying; GameState.cassettePlaying = null;
     addLine(`You stop the boombox. ${was} winds down.`);
     return;
   }
   if (isGeneric && GameState.recordPlaying && GameState.cassettePlaying) {
-    GameState.recordPlaying = null; GameState.cassettePlaying = null;
-    addLine('You lift the needle and stop the boombox. Silence.');
+    if (!ensureArea('shelf') && !ensureArea('ne')) return; // tricky
+    addLine('You\'d need to go to each player to stop them both.');
     return;
   }
   if (isGeneric) { addLine("Nothing is playing."); return; }
@@ -1927,6 +1972,7 @@ function gameStop(args) {
 }
 
 function gameEjectCassette() {
+  if (!ensureArea('ne')) return;
   if (!GameState.cassettePlaying) { addLine("There's no tape in the boombox."); return; }
   const tape = ITEMS.find(i => i.shelvedTape && i.label === GameState.cassettePlaying);
   if (tape && !GameState.gInventory.includes(tape.id)) GameState.gInventory.push(tape.id);
@@ -1936,6 +1982,7 @@ function gameEjectCassette() {
 }
 
 function gameEjectVHS() {
+  if (!ensureArea('sofa')) return;
   if (!GameState.vhsPlayingId) {
     if (GameState.cassettePlaying) { addLine("Nothing in the VCR. The cassette is in the boombox — try  eject cassette."); return; }
     addLine("There's no tape in the VCR.");
