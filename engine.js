@@ -1,4 +1,4 @@
-import { CONFIG, MOTD } from './config.js';
+import { CONFIG, MOTD, VERSION } from './config.js';
 import { FS } from './filesystem.js';
 import { SystemState, GameState, ContextManager } from './state.js';
 import { addLine, clearOutput, cap, normPath, resolvePath, children, decryptLetter, outputEl, promptEl, inputEl, panelEl } from './utils.js';
@@ -16,7 +16,7 @@ function cwdDisplay() {
 function updatePanel() {
   panelEl.innerHTML =
     `<span>────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>\n` +
-    `<span><span class="norm">  West Philly Simulator 93  BETA</span></span>\n` +
+    `<span><span class="norm">  West Philly Simulator 93  BETA v${VERSION}</span></span>\n` +
     `<span>────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>`;
 }
 
