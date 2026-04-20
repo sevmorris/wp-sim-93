@@ -2148,6 +2148,7 @@ const VERB_REGISTRY = [
   { test: (cmd, args, rest) => cmd === 'drink' && /water|glass/.test(rest), exec: (cmd, args, rest) => { gameDrink(['water']); } },
   // ── Fresh coffee steps ───────────────────────────────────────────────────
   { test: (cmd, args, rest) => cmd === 'make' && /coffee|pot|fresh|cup/.test(rest), exec: (cmd, args, rest) => {
+    if (!ensureArea('kitchen')) return;
     if      (GameState.coffeePotState === 'old' || GameState.coffeePotState === 'fresh')
       addLine('Start by dumping the old pot.');
     else if (GameState.coffeePotState === 'empty')
@@ -2167,6 +2168,13 @@ const VERB_REGISTRY = [
   { test: (cmd, args, rest) => (cmd === 'wash' || cmd === 'clean') && /dish|dishes|plate|plates/.test(rest), exec: (cmd, args, rest) => { addLine('You run the water and wash the few dishes in the sink. They can air dry.'); } },
   { test: (cmd, args, rest) => (cmd === 'dump' || cmd === 'empty') && /mug|cup/.test(rest), exec: (cmd, args, rest) => { gameDumpMug(); } },
   { test: (cmd, args, rest) => cmd === 'pour' && /out/.test(rest) && /mug|cup/.test(rest), exec: (cmd, args, rest) => { gameDumpMug(); } },
+  { test: (cmd, args, rest) => (cmd === 'dump' || cmd === 'empty') && !rest, exec: (cmd, args, rest) => { gamePourOutCoffee(); } },
+  { test: (cmd, args, rest) => cmd === 'fill'  && !rest, exec: (cmd, args, rest) => {
+    if      (GameState.coffeePotState === 'empty')     gameFillCarafe();
+    else if (GameState.gInventory.includes('glass'))   gameFillGlass();
+    else                                     gameFillMug();
+  } },
+  { test: (cmd, args, rest) => cmd === 'pour'  && !rest, exec: (cmd, args, rest) => { gameFillMug(); } },
   { test: (cmd, args, rest) => (cmd === 'pour' || cmd === 'dump' || cmd === 'empty' || cmd === 'discard') && /coffee|pot|carafe|old/.test(rest), exec: (cmd, args, rest) => { gamePourOutCoffee(); } },
   { test: (cmd, args, rest) => cmd === 'fill' && /carafe|pot|reservoir|maker|coffee maker/.test(rest), exec: (cmd, args, rest) => { gameFillCarafe(); } },
   { test: (cmd, args, rest) => cmd === 'fill' && /water/.test(rest) && /carafe|pot|reservoir/.test(rest), exec: (cmd, args, rest) => { gameFillCarafe(); } },
@@ -2248,11 +2256,6 @@ const VERB_REGISTRY = [
   { test: (cmd) => ['listen', 'hear'].includes(cmd), exec: (cmd, args, rest) => { gameListen(args); } },
   { test: (cmd) => ['smell', 'sniff'].includes(cmd), exec: (cmd, args, rest) => { gameSmell(args); } },
   { test: (cmd) => ['touch', 'feel', 'rub', 'tap', 'pet'].includes(cmd), exec: (cmd, args, rest) => { gameTouch(args); } },
-  { test: (cmd) => ['fill', 'pour'].includes(cmd), exec: (cmd, args, rest) => {
-    if      (GameState.coffeePotState === 'empty')     gameFillCarafe();
-    else if (GameState.gInventory.includes('glass'))   gameFillGlass();
-    else                                     gameFillMug();
-  } },
   { test: (cmd) => ['drink', 'sip'].includes(cmd), exec: (cmd, args, rest) => { gameDrink(args); } },
   { test: (cmd) => ['cook', 'fry'].includes(cmd), exec: (cmd, args, rest) => { gameCook(args); } },
   { test: (cmd) => ['eat', 'consume'].includes(cmd), exec: (cmd, args, rest) => { gameEat(args); } },
