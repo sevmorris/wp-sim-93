@@ -1068,7 +1068,8 @@ function gameOpen(args) {
     return;
   }
   if (/half.*(half|&)/.test(word)) { gameAddHalfAndHalf(); return; }
-  if (/coffee can|chase|sanborn|can of/.test(word)) {
+  if (/\b((coffee\s+)?(can|grounds|container)|chase|sanborn)\b/.test(word)) {
+    if (!ensureArea('kitchen')) return;
     if (GameState.coffeeCanOpen) { addLine('The can is already open.'); return; }
     const can = ITEMS.find(i => i.id === 'coffee can');
     if (!GameState.gInventory.includes('coffee can') && !(can && can.onCounter)) {
@@ -1302,7 +1303,7 @@ function gameAddGrounds() {
     return;
   }
   GameState.coffeePotState = 'grounds';
-  addLine('You pry off the lid and scoop three measures of grounds into the filter.');
+  addLine('You scoop three measures of grounds into the filter.');
   addLine('The kitchen fills with the smell of coffee for a moment.', 'dim');
   addLine('Ready to brew.', 'dim');
 }
