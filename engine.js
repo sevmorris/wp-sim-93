@@ -2221,6 +2221,7 @@ const VERB_REGISTRY = [
   { test: (cmd) => ['relax', 'chill', 'rest', 'unwind'].includes(cmd), exec: (cmd, args, rest) => {
     if (GameState.seated) {
       addLine("You lean back into the cushions. The cat shifts slightly against your leg. For a moment, everything is perfectly fine.");
+      if (GameState.coffeePotState === 'brewing') checkBrew();
     } else {
       addLine("You can't really relax standing up. Maybe sit down first.");
     }
@@ -2316,6 +2317,7 @@ const VERB_REGISTRY = [
   { test: (cmd) => ['relax', 'chill', 'rest', 'unwind'].includes(cmd), exec: (cmd, args, rest) => {
     if (GameState.seated) {
       addLine("You lean back into the cushions. The cat shifts slightly against your leg. For a moment, everything is perfectly fine.");
+      if (GameState.coffeePotState === 'brewing') checkBrew();
     } else {
       addLine("You can't really relax standing up. Maybe sit down first.");
     }
