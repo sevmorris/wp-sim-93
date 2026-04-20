@@ -2974,13 +2974,14 @@ function gameGo(args) {
     addLine('You step into the kitchen.');
     addLine('');
     addLine(typeof SCENERY.kitchen.desc === 'function' ? SCENERY.kitchen.desc() : SCENERY.kitchen.desc);
+    ContextManager.setFocus('kitchen', 'scenery');
     return;
   }
   if (/^(west|tv|television)$/.test(dest)) {
     addLine('You walk over to the TV.');
     addLine('');
     addLine(typeof SCENERY.tv.desc === 'function' ? SCENERY.tv.desc() : SCENERY.tv.desc);
-    lastScenery = 'tv';
+    ContextManager.setFocus('tv', 'scenery');
     return;
   }
   if (/^desk$/.test(dest)) {
@@ -2988,6 +2989,7 @@ function gameGo(args) {
     addLine('You walk to the desk.');
     addLine('');
     addLine(typeof SCENERY.desk.desc === 'function' ? SCENERY.desk.desc() : SCENERY.desk.desc);
+    ContextManager.setFocus('desk', 'scenery');
     return;
   }
   if (/^(south|shelf|shelves|records?|vinyl)$/.test(dest)) {
@@ -2995,6 +2997,7 @@ function gameGo(args) {
     addLine('You walk to the record shelf.');
     addLine('');
     addLine(typeof SCENERY.shelf.desc === 'function' ? SCENERY.shelf.desc() : SCENERY.shelf.desc);
+    ContextManager.setFocus('shelf', 'scenery');
     return;
   }
   if (/^tapes?$/.test(dest)) {
@@ -3007,6 +3010,7 @@ function gameGo(args) {
     addLine('You walk to the north shelves.');
     addLine('');
     addLine(typeof SCENERY.book.desc === 'function' ? SCENERY.book.desc() : SCENERY.book.desc);
+    ContextManager.setFocus('bookshelf', 'scenery');
     return;
   }
   if (/^(vhs|vhs shelf|vhs tapes|vhs collection|videos|videotapes|video shelf|video tapes|video collection)$/.test(dest)) {
@@ -3014,7 +3018,7 @@ function gameGo(args) {
     addLine('You walk to the VHS shelf.');
     addLine('');
     addLine(typeof SCENERY.vhsShelf.desc === 'function' ? SCENERY.vhsShelf.desc() : SCENERY.vhsShelf.desc);
-    lastScenery = 'vhs shelf';
+    ContextManager.setFocus('vhs shelf', 'scenery');
     return;
   }
   if (/^(ne|northeast|boombox|cassettes|cassette shelf|cassette rack|back bedroom)$/.test(dest)) {
@@ -3022,7 +3026,7 @@ function gameGo(args) {
     addLine('You walk to the northeast corner.');
     addLine('');
     addLine(typeof SCENERY.cassetteShelf.desc === 'function' ? SCENERY.cassetteShelf.desc() : SCENERY.cassetteShelf.desc);
-    lastScenery = 'cassette shelf';
+    ContextManager.setFocus('cassette shelf', 'scenery');
     return;
   }
   if (/^(sofa|couch)$/.test(dest)) { playerArea = 'sofa'; gameSit(['sofa']); return; }
@@ -3044,10 +3048,10 @@ function gameGo(args) {
     else if (deskThings.test(dest))                        playerArea = 'desk';
     else if (sc === SCENERY.cassetteShelf || sc === SCENERY.boombox) playerArea = 'ne';
     const prefix = kitchenThings.test(dest) ? 'You step into the kitchen.' : 'You walk over.';
-    lastScenery = sc.names[0];
     addLine(prefix);
     addLine('');
     addLine(typeof sc.desc === 'function' ? sc.desc() : sc.desc);
+    ContextManager.setFocus(sc.names[0], 'scenery');
     return;
   }
   addLine("You wander a bit but end up in the same spot.");
