@@ -2447,6 +2447,7 @@ function gamePlay(args) {
     else            addLine(`You slide ${it.label} into the VCR.`);
     vhsPlaying   = it.label;
     vhsPlayingId = it.id;
+    ContextManager.setFocus(it.id, 'item');
     if (!vcrOn) { addLine('The VCR is off. Turn it on to play.', 'dim'); return; }
     if (!tvOn) {
       addLine('The VCR hums. Turn on the TV to watch.', 'dim');
@@ -2471,6 +2472,7 @@ function gamePlay(args) {
     if (cassettePlaying) addLine(`You swap out ${cassettePlaying} and pop in ${it.label}.`);
     else                 addLine(`You pop ${it.label} into the boombox.`);
     cassettePlaying = it.label;
+    ContextManager.setFocus(it.id, 'item');
     if (boomBoxOn) addLine('The tape starts rolling.', 'dim');
     else           addLine('Turn the boombox on to play.', 'dim');
     return;
@@ -2482,6 +2484,7 @@ function gamePlay(args) {
     if (recordPlaying) addLine(`You lift the needle off ${recordPlaying} and put on ${it.label}.`);
     else               addLine(`You set ${it.label} on the turntable and lower the needle.`);
     recordPlaying = it.label;
+    ContextManager.setFocus(it.id, 'item');
     addLine('The room fills with music.', 'dim');
     return;
   }
@@ -2512,6 +2515,8 @@ function gameOpen(args) {
     else if (hasMug)        addLine('The mugs and glasses are on the shelf.', 'dim');
     else if (hasGlass)      addLine('The glasses are still on the shelf.', 'dim');
     else                    addLine('The mugs and glasses are still on the shelf.', 'dim');
+    if (hasMug)       ContextManager.setFocus('mug', 'item');
+    else if (hasGlass) ContextManager.setFocus('glass', 'item');
     return;
   }
   if (/fridge|refrigerator|icebox/.test(word)) {
@@ -2519,7 +2524,7 @@ function gameOpen(args) {
     fridgeOpen = true;
     const items = ITEMS.filter(it => it.inFridge && !gInventory.includes(it.id));
     addLine('You open the fridge. Cold air spills out.');
-    if (items.length) addLine('Inside: ' + items.map(it => it.label).join(', ') + '.', 'dim');
+    if (items.length) { addLine('Inside: ' + items.map(it => it.label).join(', ') + '.', 'dim'); ContextManager.setFocus(items[0].id, 'item'); }
     else addLine('Just the leftovers.', 'dim');
     return;
   }
@@ -2528,10 +2533,12 @@ function gameOpen(args) {
     kitchenDrawerOpen = true;
     addLine('You slide open the kitchen drawer.');
     const kn = ITEMS.find(it => it.id === 'knife');
-    if (kn && kn.inKitchenDrawer && !gInventory.includes('knife'))
+    if (kn && kn.inKitchenDrawer && !gInventory.includes('knife')) {
       addLine('Inside: a paring knife, takeout menus, rubber bands, a box of matches.', 'dim');
-    else
+      ContextManager.setFocus('knife', 'item');
+    } else {
       addLine('Takeout menus, rubber bands, a box of matches.', 'dim');
+    }
     return;
   }
   if (/^drawer/.test(word)) {
@@ -2540,10 +2547,12 @@ function gameOpen(args) {
       kitchenDrawerOpen = true;
       addLine('You slide open the kitchen drawer.');
       const kn2 = ITEMS.find(it => it.id === 'knife');
-      if (kn2 && kn2.inKitchenDrawer && !gInventory.includes('knife'))
+      if (kn2 && kn2.inKitchenDrawer && !gInventory.includes('knife')) {
         addLine('Inside: a paring knife, takeout menus, rubber bands, a box of matches.', 'dim');
-      else
+        ContextManager.setFocus('knife', 'item');
+      } else {
         addLine('Takeout menus, rubber bands, a box of matches.', 'dim');
+      }
     } else {
       if (drawerOpen) { addLine('The drawer is already open.'); return; }
       drawerOpen = true;
@@ -2632,6 +2641,7 @@ function gamePlayMessage() {
   addLine('');
   addLine('[end of messages]', 'dim');
   messageHeard = true;
+  ContextManager.setFocus('answering machine', 'scenery');
 }
 
 function gameFillMug() {
@@ -2660,6 +2670,7 @@ function gameFillMug() {
     addLine('You pour yourself a cup of coffee.');
     addLine("That pot's been sitting there a while. You should probably make a fresh one.", 'dim');
   }
+  ContextManager.setFocus('mug', 'item');
 }
 
 function checkBrew() {
@@ -2672,6 +2683,7 @@ function checkBrew() {
   coffeePotState = 'fresh';
   addLine('The coffee maker clicks off. The carafe is full.');
   addLine('Fresh coffee.', 'dim');
+  ContextManager.setFocus('coffee', 'scenery');
 }
 
 function gameDumpMug() {
@@ -2869,6 +2881,7 @@ function gameAddHalfAndHalf() {
   it.takeNote    = null;
   addLine('You tip in the last of it. The coffee goes pale.');
   addLine('The carton is empty.', 'dim');
+  ContextManager.setFocus('mug', 'item');
 }
 
 function _drinkWater() {
@@ -3335,6 +3348,7 @@ function gamePutInPan(args) {
   sc.inFridge = false;
   sc.hidden   = true;   // absorbed into pan state — tracked via scrappleInPan
   scrappleInPan = true;
+  ContextManager.setFocus('pan', 'scenery');
   addLine('You unwrap the scrapple and slice it into the pan with the knife.');
   addLine('Gray-brown rounds, about a half-inch thick. Ready to cook.');
   if (stoveOn) {
@@ -3366,6 +3380,7 @@ function gameCook(args) {
     return;
   }
   scrappleCooked = true;
+  ContextManager.setFocus('pan', 'scenery');
   addLine('The scrapple sizzles and crisps up. You flip the pieces with the knife.');
   addLine('Edges go golden-brown. The kitchen smells like Saturday morning.');
   addLine('');
