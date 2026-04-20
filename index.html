@@ -3741,7 +3741,8 @@ function handleGameCommand(raw) {
       case 'take': case 'get': case 'grab':
       case 'pick': case 'snag':                         gameTake(args);       break;
       case 'drop': case 'put': case 'place':
-      case 'set': case 'leave':                         gameDrop(args);       break;
+      case 'set':                                       gameDrop(args);       break;
+      case 'leave':                                     gameGo(['outside']);   break;
 
       // ── Reading ──────────────────────────────────────────────────────────
       case 'read':                                      gameRead(args);       break;
