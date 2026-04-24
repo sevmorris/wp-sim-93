@@ -48,6 +48,7 @@ export const GameState = {
   vcrOn: false,
   vhsPlaying: null,
   vhsPlayingId: null,
+  windowOpen: true,
   gInventory: [],
   gHistory: [],
   gHistIdx: -1,
@@ -93,6 +94,7 @@ export const GameState = {
       vcrOn: false,
       vhsPlaying: null,
       vhsPlayingId: null,
+      windowOpen: true,
       gInventory: [],
       gHistory: [],
       gHistIdx: -1,
@@ -155,7 +157,8 @@ export const ContextManager = (() => {
   const AREA_ITEMS = {
     desk:    ['billboard', 'tmz flyer', 'pens', 'pen', 'floppy'],
     kitchen: ['mug', 'glass', 'scrapple', 'knife', 'coffee can',
-              'filter box', 'filter', 'half and half'],
+              'filter box', 'filter', 'half and half',
+              'matches', 'rubber bands', 'takeout menus'],
   };
   const AREA_SCENERY = {
     desk:    ['desk', 'drawer', 'pc', 'computer', 'monitor', 'printer'],

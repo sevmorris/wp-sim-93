@@ -392,7 +392,7 @@ function gameLook() {
     if (GameState.seated) addLine('You are sitting on the sofa.', 'dim');
     return;
   }
-  for (const line of ROOM_DESC.split('\n')) addLine(line);
+  for (const line of ROOM_DESC().split('\n')) addLine(line);
   if (!GameState.messageHeard) addLine('The answering machine light is blinking.', 'dim');
   addLine('');
   // Only show items loose in the room (not stored on any shelf/surface, not hidden)
@@ -558,6 +558,7 @@ function gameTake(args) {
     return;
   }
   const it = gameItem(word);
+  if (it && it.inTrash) { addLine(`You threw that away. Try: take ${it.label} from trash`); return; }
   if (!it || it.hidden)           { addLine("You don't see that here.");      return; }
   if (GameState.gInventory.includes(it.id)) { addLine("You're already carrying that."); return; }
 
@@ -707,7 +708,7 @@ function gameRead(args) {
     }
     addLine('');
     addLine('This disk is password protected.', 'dim');
-    addLine('Enter password.', 'dim');
+    addLine('Enter password. (Press Enter with no input to cancel.)', 'dim');
     addLine('');
     GameState.awaitingFloppyPass = true;
     promptEl.textContent = 'Password: ';
@@ -826,11 +827,12 @@ function gameExamine(args) {
 
   // Then items — auto-navigate to the item's home area if not already there
   const it = gameItem(word);
+  if (it && it.inTrash) { addLine(`You threw that away. It's in the trash.`); return; }
   if (!it || it.hidden) { addLine("You don't see that here."); return; }
-  if (it.inDrawer        && !GameState.drawerOpen        && !GameState.gInventory.includes(it.id)) { addLine("You don't see that here."); return; }
-  if (it.inCabinet       && !GameState.cabinetOpen       && !GameState.gInventory.includes(it.id)) { addLine("You don't see that here."); return; }
-  if (it.inFridge        && !GameState.fridgeOpen        && !GameState.gInventory.includes(it.id)) { addLine("You don't see that here."); return; }
-  if (it.inKitchenDrawer && !GameState.kitchenDrawerOpen && !GameState.gInventory.includes(it.id)) { addLine("You don't see that here."); return; }
+  if (it.inDrawer        && !GameState.drawerOpen        && !GameState.gInventory.includes(it.id)) { addLine("It's in the drawer. Open it first."); return; }
+  if (it.inCabinet       && !GameState.cabinetOpen       && !GameState.gInventory.includes(it.id)) { addLine("It's in the cabinet. Open it first."); return; }
+  if (it.inFridge        && !GameState.fridgeOpen        && !GameState.gInventory.includes(it.id)) { addLine("It's in the fridge. Open it first."); return; }
+  if (it.inKitchenDrawer && !GameState.kitchenDrawerOpen && !GameState.gInventory.includes(it.id)) { addLine("It's in the kitchen drawer. Open it first."); return; }
   if (it.id === 'scrapple' && GameState.scrappleInPan && !GameState.gInventory.includes('scrapple')) { /* in pan — still examinable */ }
   const reach = ContextManager.canInteract(it.id);
   if (reach !== true) {
@@ -1052,11 +1054,14 @@ function gameOpen(args) {
     GameState.kitchenDrawerOpen = true;
     addLine('You slide open the kitchen drawer.');
     const kn = ITEMS.find(it => it.id === 'knife');
-    if (kn && kn.inKitchenDrawer && !GameState.gInventory.includes('knife')) {
-      addLine('Inside: a paring knife, takeout menus, rubber bands, a box of matches.', 'dim');
-      ContextManager.setFocus('knife', 'item');
+    const drawerContents = ['knife', 'matches', 'rubber bands', 'takeout menus']
+      .map(id => ITEMS.find(i => i.id === id))
+      .filter(i => i && i.inKitchenDrawer && !GameState.gInventory.includes(i.id) && !i.inTrash);
+    if (drawerContents.length) {
+      addLine('Inside: ' + drawerContents.map(i => i.label).join(', ') + '.', 'dim');
+      ContextManager.setFocus(drawerContents[0].id, 'item');
     } else {
-      addLine('Takeout menus, rubber bands, a box of matches.', 'dim');
+      addLine('Empty now.', 'dim');
     }
     return;
   }
@@ -1065,12 +1070,14 @@ function gameOpen(args) {
       if (GameState.kitchenDrawerOpen) { addLine('The kitchen drawer is already open.'); return; }
       GameState.kitchenDrawerOpen = true;
       addLine('You slide open the kitchen drawer.');
-      const kn2 = ITEMS.find(it => it.id === 'knife');
-      if (kn2 && kn2.inKitchenDrawer && !GameState.gInventory.includes('knife')) {
-        addLine('Inside: a paring knife, takeout menus, rubber bands, a box of matches.', 'dim');
-        ContextManager.setFocus('knife', 'item');
+      const drawerContents2 = ['knife', 'matches', 'rubber bands', 'takeout menus']
+        .map(id => ITEMS.find(i => i.id === id))
+        .filter(i => i && i.inKitchenDrawer && !GameState.gInventory.includes(i.id) && !i.inTrash);
+      if (drawerContents2.length) {
+        addLine('Inside: ' + drawerContents2.map(i => i.label).join(', ') + '.', 'dim');
+        ContextManager.setFocus(drawerContents2[0].id, 'item');
       } else {
-        addLine('Takeout menus, rubber bands, a box of matches.', 'dim');
+        addLine('Empty now.', 'dim');
       }
     } else {
       if (GameState.drawerOpen) { addLine('The drawer is already open.'); return; }
@@ -1088,6 +1095,13 @@ function gameOpen(args) {
   }
   if (/half.*(half|&)/.test(word)) { gameAddHalfAndHalf(); return; }
   if (/filter box|box of filter|filters/.test(word)) { addLine("Pull one out and add it to the basket."); return; }
+  if (/window/.test(word)) {
+    if (GameState.windowOpen) { addLine("The window is already open."); return; }
+    GameState.windowOpen = true;
+    addLine('You push the window open a crack. The damp air comes through immediately.');
+    addLine('The rain fills the room.', 'dim');
+    return;
+  }
   if (/door/.test(word)) { addLine("You're not going anywhere right now."); return; }
   addLine("You can't open that.");
 }
@@ -1132,7 +1146,9 @@ function gameEjectFloppy() {
     addLine('');
     addLine('──────────────────────────────────────────────────────────────────', 'dim');
     addLine('');
-    addLine('CONGRATULATIONS, YOU\'VE READ THE FLOPPY LETTER!', 'hi');
+    addLine('You hold the disk for a moment.');
+    addLine('The rain keeps going. The room is the same room.', 'dim');
+    addLine('You\'ve read the letter. Time to make plans for this afternoon.');
     addLine('');
     addLine('──────────────────────────────────────────────────────────────────', 'dim');
     addLine('');
@@ -1229,7 +1245,9 @@ function gameThrowAway(args) {
   GameState.gInventory = GameState.gInventory.filter(id => id !== it.id);
   it.hidden  = true;
   it.dropped = false;
+  it.inTrash = true;
   addLine(`You toss ${it.label} in the trash.`);
+  if (['knife', 'filter', 'filter box'].includes(it.id)) addLine('(You can dig it out of the trash if you need it.)', 'dim');
 }
 
 function gamePourOutCoffee() {
@@ -1279,8 +1297,11 @@ function gameAddFilter() {
   if (GameState.coffeePotState === 'empty') { addLine('Fill the reservoir with water first.'); return; }
   if (!GameState.gInventory.includes('filter')) {
     const box = ITEMS.find(i => i.id === 'filter box');
-    if (box && box.onCounter) addLine("You'll need a filter. Take one from the box on the counter.");
-    else                      addLine("You don't have a filter.");
+    const filterItem = ITEMS.find(i => i.id === 'filter');
+    if (filterItem && filterItem.inTrash) addLine("You threw the filter in the trash. Dig it out first.");
+    else if (box && box.inTrash) addLine("You threw out the filter box. Dig it out of the trash.");
+    else if (box && box.onCounter) addLine("You'll need a filter. Take one from the box on the counter.");
+    else addLine("You don't have a filter.");
     return;
   }
   GameState.gInventory = GameState.gInventory.filter(id => id !== 'filter');
@@ -1597,7 +1618,27 @@ function gameWatch(args) {
 function gameListen(args) {
   const target = (args || []).join(' ');
   if (!target || target === 'to') {
-    // ... no area check for general listening
+    if (GameState.recordPlaying) {
+      const rec = ITEMS.find(i => i.label === GameState.recordPlaying && i.shelved);
+      addLine(`${GameState.recordPlaying} is on the turntable.`);
+      if (rec && LISTEN_DESC[rec.id]) addLine(LISTEN_DESC[rec.id], 'dim');
+      else addLine('Sounds good.', 'dim');
+    } else if (GameState.cassettePlaying) {
+      addLine(`${GameState.cassettePlaying} is playing on the boombox.`);
+      const tape = ITEMS.find(i => i.label === GameState.cassettePlaying && i.shelvedTape);
+      if (tape && LISTEN_DESC[tape.id]) addLine(LISTEN_DESC[tape.id], 'dim');
+    } else if (GameState.tvOn && GameState.vhsPlaying) {
+      const wd = WATCH_DESC[GameState.vhsPlayingId];
+      addLine(`The VCR is running — ${GameState.vhsPlaying} is on.`);
+      if (wd) addLine(wd, 'dim');
+    } else if (GameState.tvOn) {
+      addLine("The laugh track from Hogan's Heroes.");
+    } else if (GameState.scrappleInPan && GameState.stoveOn && !GameState.scrappleCooked) {
+      addLine('A steady sizzle from the kitchen. The scrapple is working.');
+    } else {
+      addLine(GameState.windowOpen ? 'Rain through the window. The fridge hums in the kitchen.' : 'The fridge hums in the kitchen. Rain against the glass outside.');
+    }
+    return;
   }
   if (/record|turntable|vinyl|needle/.test(target)) {
     if (!ensureArea('shelf')) return;
@@ -1646,9 +1687,13 @@ function gameListen(args) {
     if (!ensureArea('kitchen')) return;
     if (GameState.scrappleInPan && GameState.stoveOn && !GameState.scrappleCooked) addLine("A steady sizzle. It's working.");
     else if (GameState.scrappleCooked)                         addLine('Quiet now. The scrapple is done.');
+    else if (GameState.scrappleInPan)                          addLine('Nothing. The scrapple sits in the pan. The stove is off.');
     else                                             addLine("Nothing. The stove is off.");
     return;
   }
+  if (/rain|window|outside/.test(target)) { addLine(GameState.windowOpen ? 'Rain through the window. A steady sound.' : 'Rain against the glass. Muffled, but it\'s still going.'); return; }
+  if (/cat|cracker/.test(target)) { addLine('Slow, even breathing. She\'s deeply asleep.'); return; }
+  if (/music|sound|noise|ambient|room/.test(target)) { gameListen([]); return; }
   addLine("You don't hear much.");
 }
 
@@ -1659,7 +1704,7 @@ function gameSmell(args) {
     if (GameState.farted) { parts.push('something rank — that was you'); GameState.farted = false; }
     if (GameState.scrappleInPan && GameState.stoveOn && !GameState.scrappleCooked) parts.push('sizzling scrapple — sage, cornmeal, pork fat. It fills the whole apartment');
     else if (GameState.scrappleCooked) parts.push('cooked scrapple going cold in the kitchen');
-    parts.push('smell of rain coming through the open window');
+    parts.push(GameState.windowOpen ? 'smell of rain coming through the open window' : 'rain muffled behind the closed window');
     parts.push('old paperbacks');
     if (GameState.mugFilled && GameState.gInventory.includes('mug')) parts.push('the coffee in your hand');
     else if (GameState.coffeePotState === 'fresh')   parts.push('fresh coffee from the kitchen');
@@ -1734,7 +1779,7 @@ function gameTouch(args) {
   if (/tv|television|screen/.test(word)){ addLine(GameState.tvOn ? 'The screen is warm to the touch.' : 'The screen is cold. The TV is off.'); return; }
   if (/lamp/.test(word))                { addLine(GameState.lampOn ? 'The shade is warm.' : 'The shade is cool. The lamp is off.'); return; }
   if (/desk/.test(word))                { addLine('Cool metal. A few scratches.'); return; }
-  if (/window/.test(word))              { addLine('The glass is cool. Warm, damp air comes through the crack where it\'s open.'); return; }
+  if (/window/.test(word))              { addLine(GameState.windowOpen ? 'The glass is cool. Warm, damp air comes through the crack.' : 'The glass is cool and slightly damp. The rain is loud against it.'); return; }
   if (/record|vinyl/.test(word)) {
     if (GameState.recordPlaying && GameState.gInventory.some(id => ITEMS.find(i => i.id === id)?.label === GameState.recordPlaying))
       addLine("It's spinning. Don't touch the surface.");
@@ -1748,7 +1793,7 @@ function gameTouch(args) {
   if (/phone|telephone|receiver/.test(word)) { addLine('Cool plastic. The buttons have a little give.'); return; }
   if (/answering machine|machine/.test(word)) { addLine(`Plastic. The play button has a worn spot in the center.${GameState.messageHeard ? '' : ' The light pulses under your finger.'}`); return; }
   if (/vcr/.test(word))                { addLine(GameState.vcrOn ? 'Warm plastic. The eject button clicks satisfyingly.' : 'Cool plastic. The eject button clicks satisfyingly.'); return; }
-  if (/floppy|disk/.test(word))       { addLine('Smooth plastic. A little warm from being in your pocket.'); return; }
+  if (/floppy|disk/.test(word))       { addLine(GameState.floppyInserted ? 'You run a finger along the drive slot. The machine hums faintly.' : 'Smooth plastic. A little warm from being in your pocket.'); return; }
   if (/cat|cracker|kitty/.test(word)) { addLine(GameState.seated ? 'Warm and soft. She shifts slightly but stays asleep.' : 'You give her a gentle pet. Warm fur, slow breathing. She doesn\'t wake up.'); return; }
   if (/stove|burner|range/.test(word)) { addLine(GameState.stoveOn ? 'Hot. You pull your hand back.' : 'Cool metal. The knob feels well-used.'); return; }
   if (/pan|skillet|cast iron/.test(word)) { addLine((GameState.stoveOn || GameState.scrappleCooked) ? 'Very hot. Not touching that.' : 'Smooth, heavy cast iron. Decades of seasoning.'); return; }
@@ -1840,7 +1885,9 @@ function gamePutInPan(args) {
     return;
   }
   if (!GameState.gInventory.includes('knife')) {
-    addLine("You'll need a knife to slice it. There might be one in the kitchen drawer.");
+    const _k = ITEMS.find(i => i.id === 'knife');
+    if (_k && _k.hidden) addLine("You'll need a knife. You threw it in the trash — dig it out.");
+    else addLine("You'll need a knife to slice it. There might be one in the kitchen drawer.");
     return;
   }
   GameState.gInventory = GameState.gInventory.filter(id => id !== 'scrapple');
@@ -1938,6 +1985,12 @@ function gameClose(args) {
   if (/^drawer/.test(word)) {
     if (!GameState.drawerOpen) { addLine("It's already closed."); return; }
     GameState.drawerOpen = false; addLine('You slide the drawer shut.'); return;
+  }
+  if (/window/.test(word)) {
+    if (!GameState.windowOpen) { addLine("The window is already closed."); return; }
+    GameState.windowOpen = false;
+    addLine('You push the window shut. The rain goes quiet — just a low hum against the glass now.');
+    return;
   }
   if (/door/.test(word)) { addLine("It's already closed."); return; }
   addLine("You can't close that.");
@@ -2073,7 +2126,7 @@ async function handleFloppyPass(val) {
 
   if (!val.trim()) {
     addLine('');
-    addLine('Incorrect password.', 'dim');
+    addLine('(password prompt closed)', 'dim');
     addLine('');
     return;
   }
@@ -2099,6 +2152,22 @@ const VERB_REGISTRY = [
   { test: (cmd, args, rest) => cmd === 'look'  && (args[0] === 'in' || args[0] === 'inside' || args[0] === 'into'), exec: (cmd, args, rest) => { gameExamine(args.slice(1)); } },
   { test: (cmd, args, rest) => cmd === 'where' && /^am\b/.test(rest), exec: (cmd, args, rest) => { handleGameCommand('where'); } },
   { test: (cmd, args, rest) => cmd === 'pick'  && args[0] === 'up', exec: (cmd, args, rest) => { gameTake(args.slice(1)); } },
+  { test: (cmd, args, rest) => (cmd === 'take' || cmd === 'get' || cmd === 'grab' || cmd === 'dig') && /\b(from|out of|out)\b.*\b(trash|garbage|bin|can|waste)/i.test(rest), exec: (cmd, args, rest) => {
+    const rawWord = rest.replace(/\s*(from|out of|out)\s*(the\s+)?(trash|garbage|bin|can|waste\s*basket).*/i, '').trim();
+    const itemWord = rawWord.replace(/^(the|a|an)\s+/i, '').trim();
+    const it = itemWord ? ITEMS.find(i => i.inTrash && (i.id === itemWord || i.label.toLowerCase().includes(itemWord))) : null;
+    if (!it) {
+      const trashed = ITEMS.filter(i => i.inTrash);
+      if (!trashed.length) { addLine("The trash is empty."); return; }
+      if (!itemWord) { addLine("Dig what out? The trash has: " + trashed.map(i => i.label).join(', ') + "."); return; }
+      addLine("That's not in the trash.");
+      return;
+    }
+    it.inTrash = false; it.hidden = false;
+    GameState.gInventory.push(it.id);
+    addLine(`You dig ${it.label} out of the trash.`);
+    ContextManager.setFocus(it.id, 'item');
+  } },
   { test: (cmd, args, rest) => cmd === 'put'   && args[0] === 'down', exec: (cmd, args, rest) => { gameDrop(args.slice(1)); } },
   { test: (cmd, args, rest) => cmd === 'put'   && /on (the )?turntable/.test(rest), exec: (cmd, args, rest) => { gamePlay(rest.replace(/\s*on (the )?turntable/, '').trim().split(' ')); } },
   { test: (cmd, args, rest) => cmd === 'turn'  && args[0] === 'on'  && /coffee|maker|coffeemaker/.test(args.slice(1).join(' ')), exec: (cmd, args, rest) => { gameStartBrew(); } },
@@ -2287,7 +2356,6 @@ const VERB_REGISTRY = [
   { test: (cmd) => ['sleep', 'nap'].includes(cmd), exec: (cmd, args, rest) => { addLine("You're not tired enough for that."); } },
   { test: (cmd) => ['think'].includes(cmd), exec: (cmd, args, rest) => { addLine('Your mind wanders.'); } },
   { test: (cmd) => ['dance'].includes(cmd), exec: (cmd, args, rest) => { addLine('You shuffle in place for a moment.'); } },
-  { test: (cmd) => ['yell', 'shout', 'scream'].includes(cmd), exec: (cmd, args, rest) => { addLine('Your voice echoes off the walls.'); } },
   { test: (cmd) => ['sing'].includes(cmd), exec: (cmd, args, rest) => {
     addLine(GameState.recordPlaying ? `You hum along with ${GameState.recordPlaying}.` : 'You hum to yourself.');
   } },

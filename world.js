@@ -1,8 +1,8 @@
 import { GameState } from './state.js';
 import { addLine, cap } from './utils.js';
 
-export const ROOM_DESC =
-`A small living room. A boxy television sits against the west wall, a VCR stacked underneath. An old sofa sits in the middle of the room, facing it — a cat curled up on one end. Records and a turntable line the south wall. Along the north wall: bookshelves at the northwest end, then a VHS shelf, then a metal desk with a PC and printer — and in the northeast corner a battered boombox and a rack of cassettes near the door to the back bedroom. In the northwest corner, a small table holds a phone and an answering machine. Kitchen along the east wall. The sound of rain through the open window.`;
+export const ROOM_DESC = () =>
+`A small living room. A boxy television sits against the west wall, a VCR stacked underneath. An old sofa sits in the middle of the room, facing it — a cat curled up on one end. Records and a turntable line the south wall. Along the north wall: bookshelves at the northwest end, then a VHS shelf, then a metal desk with a PC and printer — and in the northeast corner a battered boombox and a rack of cassettes near the door to the back bedroom. In the northwest corner, a small table holds a phone and an answering machine. Kitchen along the east wall. ${GameState.windowOpen ? 'The sound of rain through the open window.' : 'The window is closed. The rain is muffled outside.'}`;
 
 export const ITEMS = [
 
@@ -75,7 +75,10 @@ $3`,
     roomDesc:  'A ceramic mug is here.',
     examDesc() {
       if (!GameState.mugFilled) return 'A plain ceramic mug. Empty.';
-      return GameState.mugHasHalf ? 'A ceramic mug. Coffee with half & half. Still warm.' : 'A ceramic mug. Still a little warm.';
+      if (GameState.mugHasFreshCoffee && GameState.mugHasHalf) return 'A ceramic mug. Fresh coffee with half & half. Still hot.';
+      if (GameState.mugHasFreshCoffee) return 'A ceramic mug. Fresh coffee, still hot.';
+      if (GameState.mugHasHalf) return 'A ceramic mug. Coffee with half & half. Lukewarm now.';
+      return 'A ceramic mug. Still a little warm.';
     },
   },
   {
@@ -190,6 +193,24 @@ $3`,
     inKitchenDrawer: true,
     examDesc:        'A short paring knife. Wooden handle, slightly worn. Sharp enough.',
   },
+  {
+    id:              'matches',
+    label:           'a box of matches',
+    inKitchenDrawer: true,
+    examDesc:        'Redhead kitchen matches. A small cardboard box, about half full. Strike-on-box.',
+  },
+  {
+    id:              'rubber bands',
+    label:           'some rubber bands',
+    inKitchenDrawer: true,
+    examDesc:        'A tangle of rubber bands in various sizes. The usual kitchen-drawer chaos.',
+  },
+  {
+    id:              'takeout menus',
+    label:           'some takeout menus',
+    inKitchenDrawer: true,
+    examDesc:        'A few folded takeout menus. Jade Palace, a pizza place you stopped ordering from, something else too faded to read.',
+  },
 
   // ── Counter items (onCounter: true — visible on counter, not in room) ────
   {
@@ -232,7 +253,7 @@ export const WATCH_DESC = {
   'letterman':           "Late Night. Letterman leaning back in the chair, doing the bit. Paul Shaffer vamping underneath. A home recording — the counter in the corner, tracking since whenever the tape started.",
   'unlabeled 1':         "Seven's place in Virginia. A creek running over rocks, green trees overhead, sun coming through. You're in the shade beside the water. The camera pans slowly downstream.",
   'unlabeled 2':         "Seven's place in Virginia. A creek running over rocks, green trees overhead, sun coming through. You're in the shade beside the water. The camera pans slowly downstream.",
-  'unlabeled 3':         "Seven's place in Virginia. A creek running over rocks, green trees overhead, sun coming through. You're in the shade beside the water. The camera pans slowly downstream.",
+  'unlabeled 3':         "Seven's place again, but different — the creek is lower, leaves off the trees. Late fall, maybe. The camera tilts up to a gray sky and holds there for a long time before cutting.",
 };
 
 export const LISTEN_DESC = {
@@ -344,8 +365,8 @@ export const SCENERY = {
     names: ['lamp', 'old lamp'],
     desc() { return `An old lamp from Second Mile Thrift Store. It is ${GameState.lampOn ? 'on' : 'off'}.`; },
     toggle: true,
-    turnOn()  { GameState.lampOn = true;  addLine('You click the lamp on. The room fills with warm light.'); },
-    turnOff() { GameState.lampOn = false; addLine('You click the lamp off. The room goes dark.'); },
+    turnOn()  { if (GameState.lampOn)  { addLine('The lamp is already on.');  return; } GameState.lampOn = true;  addLine('You click the lamp on. The room fills with warm light.'); },
+    turnOff() { if (!GameState.lampOn) { addLine('The lamp is already off.'); return; } GameState.lampOn = false; addLine('You click the lamp off. The room goes dark.'); },
   },
   tv: {
     names: ['tv', 'television', 'set'],
@@ -356,12 +377,13 @@ export const SCENERY = {
     },
     toggle: true,
     turnOn()  {
+      if (GameState.tvOn) { addLine("The TV is already on."); return; }
       GameState.tvOn = true;
       if (GameState.vhsPlaying) addLine(`You click the TV on. The VCR is already running — ${GameState.vhsPlaying} comes up on screen.`);
       else if (GameState.vcrOn) addLine("You click the TV on. The VCR is on — pop in a tape to watch something.");
       else            addLine("You click the TV on. Channel 17. Hogan's Heroes.");
     },
-    turnOff() { GameState.tvOn = false; addLine('You click the TV off. Silence.'); },
+    turnOff() { if (!GameState.tvOn) { addLine("The TV is already off."); return; } GameState.tvOn = false; addLine('You click the TV off. Silence.'); },
   },
   shelf: {
     names: ['shelf', 'shelves', 'record', 'records', 'record shelf', 'vinyl'],
@@ -490,13 +512,13 @@ export const SCENERY = {
     },
   },
   kitchenDrawer: {
-    names: ['kitchen drawer', 'drawer by the fridge', 'knife drawer', 'silverware drawer', 'utensil drawer', 'matches', 'rubber bands', 'rubber band'],
+    names: ['kitchen drawer', 'drawer by the fridge', 'knife drawer', 'silverware drawer', 'utensil drawer'],
     desc() {
       if (!GameState.kitchenDrawerOpen) return 'A small drawer beside the refrigerator. Closed.';
-      const knifeGone = GameState.gInventory.includes('knife') || !ITEMS.find(i=>i.id==='knife')?.inKitchenDrawer;
-      return knifeGone
-        ? 'The kitchen drawer is open. Takeout menus, rubber bands, a box of matches.'
-        : 'The kitchen drawer is open. A paring knife, some takeout menus, rubber bands, a box of matches.';
+      const drawerIds = ['knife', 'matches', 'rubber bands', 'takeout menus'];
+      const still = ITEMS.filter(i => drawerIds.includes(i.id) && i.inKitchenDrawer && !GameState.gInventory.includes(i.id) && !i.inTrash);
+      if (!still.length) return 'The kitchen drawer is open. Empty now.';
+      return 'The kitchen drawer is open. ' + still.map(i => i.label).join(', ') + '.';
     },
   },
   kitchen: {
@@ -511,12 +533,16 @@ export const SCENERY = {
       else                                   coffeeBlurb = 'a coffee maker on the counter, carafe still half full';
       return `A small, open kitchen along the east wall. ${coffeeBlurb[0].toUpperCase() + coffeeBlurb.slice(1)}. `
            + 'A cabinet above it. A refrigerator humming against the wall. '
-           + 'A gas range in the southeast corner' + (GameState.stoveOn ? ' — one burner lit' : '') + '. A small window above it, cracked open. A few dishes in the sink.';
+           + 'A gas range in the southeast corner' + (GameState.stoveOn ? ' — one burner lit' : '') + '. A small window above it' + (GameState.windowOpen ? ', cracked open' : ', closed') + '. A few dishes in the sink.';
     },
   },
   window: {
     names: ['window', 'windows', 'outside'],
-    desc: 'A small window in the southeast corner of the kitchen, cracked open an inch or two. Warm, damp air drifts in through the gap.',
+    desc() {
+      return GameState.windowOpen
+        ? 'A small window in the southeast corner of the kitchen, cracked open an inch or two. Warm, damp air drifts in through the gap.'
+        : 'A small window in the southeast corner of the kitchen. Closed. The rain hammers against the glass outside.';
+    },
   },
   quilt: {
     names: ['quilt', 'blanket', 'throw', 'patchwork'],
@@ -554,8 +580,8 @@ export const SCENERY = {
       return "The boombox is on. Nothing in the deck.";
     },
     toggle: true,
-    turnOn()  { GameState.boomBoxOn = true;  addLine('You click the boombox on. It hisses to life.'); if (GameState.cassettePlaying) addLine('The tape starts rolling.', 'dim'); },
-    turnOff() { GameState.boomBoxOn = false; GameState.cassettePlaying = null; addLine('You click the boombox off.'); },
+    turnOn()  { if (GameState.boomBoxOn)  { addLine('The boombox is already on.');  return; } GameState.boomBoxOn = true;  addLine('You click the boombox on. It hisses to life.'); if (GameState.cassettePlaying) addLine('The tape starts rolling.', 'dim'); },
+    turnOff() { if (!GameState.boomBoxOn) { addLine('The boombox is already off.'); return; } GameState.boomBoxOn = false; GameState.cassettePlaying = null; addLine('You click the boombox off.'); },
   },
   vhsShelf: {
     names: ['vhs shelf', 'vhs tapes', 'vhs collection', 'video shelf', 'videos', 'videotapes', 'video tapes', 'video collection', 'vhs'],
@@ -578,8 +604,8 @@ export const SCENERY = {
       return 'The VCR is on. No tape loaded.';
     },
     toggle: true,
-    turnOn()  { GameState.vcrOn = true;  addLine('The VCR clicks on. The clock blinks 12:00.'); if (GameState.vhsPlayingId && GameState.tvOn) addLine('The tape starts playing.', 'dim'); else if (GameState.vhsPlayingId) addLine('Turn on the TV to watch.', 'dim'); },
-    turnOff() { GameState.vcrOn = false; GameState.vhsPlaying = null; GameState.vhsPlayingId = null; addLine('You click the VCR off.'); },
+    turnOn()  { if (GameState.vcrOn)  { addLine('The VCR is already on.');  return; } GameState.vcrOn = true;  addLine('The VCR clicks on. The clock blinks 12:00.'); if (GameState.vhsPlayingId && GameState.tvOn) addLine('The tape starts playing.', 'dim'); else if (GameState.vhsPlayingId) addLine('Turn on the TV to watch.', 'dim'); },
+    turnOff() { if (!GameState.vcrOn) { addLine('The VCR is already off.'); return; } GameState.vcrOn = false; GameState.vhsPlaying = null; GameState.vhsPlayingId = null; addLine('You click the VCR off.'); },
   },
   floor: {
     names: ['floor', 'ground', 'rug', 'area rug', 'carpet'],
