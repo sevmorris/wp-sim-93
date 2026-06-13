@@ -7,6 +7,31 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=VT323&family=Lora:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css">
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       CACHE-BUSTING / VERSION PIN
+       The version query below is appended to EVERY local module via this
+       import map, so a version bump invalidates the whole ES module graph
+       at once (engine + world + state + utils + config + filesystem), not
+       just the entry file. This prevents a fresh engine.js from loading a
+       stale world.js (which renders a blank page when exports don't match).
+
+       TO DEPLOY: bump the version in ONE place — find/replace 260613.01
+       below AND in the <script src> tag, plus VERSION in config.js. Keep
+       all three identical. (A project-wide replace of the old version
+       string does it in one shot.)
+       ════════════════════════════════════════════════════════════════════ -->
+  <script type="importmap">
+  {
+    "imports": {
+      "./config.js":     "./config.js?v=260613.01",
+      "./filesystem.js": "./filesystem.js?v=260613.01",
+      "./state.js":      "./state.js?v=260613.01",
+      "./utils.js":      "./utils.js?v=260613.01",
+      "./world.js":      "./world.js?v=260613.01"
+    }
+  }
+  </script>
 </head>
 <body>
 <div id="app">
@@ -27,6 +52,6 @@
   </div>
 </div>
 
-<script type="module" src="./engine.js?v=260424.01"></script>
+<script type="module" src="./engine.js?v=260613.01"></script>
 </body>
 </html>

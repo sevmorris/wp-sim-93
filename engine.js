@@ -19,7 +19,140 @@ function ensureArea(area) {
   return false;
 }
 
+// ════════════════════════════════════════════════════════════════════════
+//  DEPTH-PASS INFRASTRUCTURE (wp-sim-93 follow-up)
+//  A small random-pick helper, rotation pools, and Cracker's soft state
+//  machine. Pools are consumed by handlers further down; cat position is
+//  read by world.js descriptions (GameState.catPos) and reflected here.
+// ════════════════════════════════════════════════════════════════════════
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+// Move Cracker to a new position. Prints `line` (dim) only if she actually
+// moved. Returns true on a move. Callers decide when relocation makes sense.
+function moveCat(pos, line) {
+  if (GameState.catPos === pos) return false;
+  GameState.catPos = pos;
+  if (line) addLine(line, 'dim');
+  return true;
+}
+
+// Petting — position-aware, with variation. Cats are inconsistent.
+function catPetLine() {
+  if (GameState.catPos === 'windowsill') return pick([
+    "You cross to the window and scratch the top of her head. She leans into it without once taking her eyes off the glass.",
+    "You rub behind her ears at the sill. She accepts it as her due and keeps watching the rain.",
+  ]);
+  if (GameState.catPos === 'bowl') return pick([
+    "You crouch and stroke her back while she eats. She allows it, crunching steadily, businesslike.",
+    "You scratch along her spine as she works through the bowl. Tail-tip flick. No pause in the chewing.",
+  ]);
+  return pick([
+    "You scratch behind her ear. She doesn't open her eyes, but the purr starts up, low and ragged.",
+    "You run a hand down her side. She does a slow blink — the cat version of a handshake — and settles deeper.",
+    "She rolls half onto her back, shows you the belly, then thinks better of it and tucks back in. Offer rescinded.",
+    "You pet her a few strokes. She purrs, then nips your hand — not hard, just a note for the file — and goes still.",
+    "She tolerates exactly four strokes, gets up, turns around twice, and lies back down facing away from you.",
+    "Warm and boneless under your hand. She barely stirs. The purr is more vibration than sound.",
+  ]);
+}
+
+// Talking to the cat — she never answers; what she does instead varies.
+function catTalkLine() {
+  if (GameState.catPos === 'windowsill') return pick([
+    "You ask what's so interesting out there. Her tail twitches once. State secrets, apparently.",
+    "You say her name. One ear rotates toward you; her eyes stay on the rain.",
+  ]);
+  if (GameState.catPos === 'bowl') return pick([
+    "You talk to her while she eats. She does not consider this worth a response.",
+    "You ask if it's good. Crunch, crunch. The review is implied.",
+  ]);
+  return pick([
+    "You ask Cracker what she thinks. She thinks about it, deeply, with her eyes closed. No comment.",
+    "You say a few words to her. Her ear swivels toward you, then away. Conversation over.",
+    "\"Big plans today?\" you ask. She stretches one leg straight out, holds it, retracts it. That's a no.",
+    "You tell her about your morning. She listens the way cats do — completely, and not at all.",
+  ]);
+}
+
+// The view out the kitchen window: West Philly, the back of the block, October rain.
+const WINDOW_VIEWS = [
+  "Out past the fire escape, the backs of the next street's row houses stand in the rain, brick gone dark and wet. Somebody's laundry got left on a line and is paying for it. The telephone wires sag, beaded with water. A lone ailanthus in the gap between yards has started going yellow at the edges.",
+  "The little concrete yards below are slick and empty — trash cans chained to a post, a kid's bike on its side under a porch overhang. The rain comes straight down, no wind to it. A grey cat, not Cracker, picks its way along the top of a fence, unhurried, and is gone.",
+  "Gutters running hard, a downspout chattering into a puddle that's claimed half the back alley. The October trees are caught half-turned, half-bare; wet leaves plaster the steps across the way. Two houses down, a kitchen light burns yellow behind a screen, somebody moving around in it.",
+  "Just the rain and the backs of the houses and the wires strung between them. A SEPTA bus groans by out front — you feel it more than hear it. The sky is one flat sheet of pale grey, edgeless, sunless, a morning that could be nine o'clock or noon.",
+];
+
+function gameWindowView() {
+  addLine(pick(WINDOW_VIEWS));
+  addLine(GameState.windowOpen
+    ? 'Damp air comes through the gap, smelling of wet pavement and leaves.'
+    : 'The closed glass blurs it; rain runs down in long seams.', 'dim');
+  if (GameState.catPos === 'sofa' || GameState.catPos === 'awake')
+    moveCat('windowsill', 'Cracker hops up onto the sill beside you to see what you see.');
+}
+
+// Ambient sensory rotation pools
+const LISTEN_IDLE_OPEN = [
+  "Rain through the open window — steady, in no hurry. The fridge cycles on in the kitchen and hums under it.",
+  "Water running in the gutters and downspouts. A car goes by on the wet street, tires hissing, and fades out.",
+  "The rain, and somewhere above you the upstairs neighbor crossing a floor, one slow board at a time.",
+  "Rain, and the radiator knocking once, twice, settling. A pigeon shuffles and coos under the eave outside.",
+];
+const LISTEN_IDLE_CLOSED = [
+  "The fridge hums in the kitchen. Rain against the glass, muffled and patient.",
+  "Quiet, mostly. The building's pipes tick somewhere in the walls. Rain blurs against the closed window.",
+  "The low hum of the refrigerator. Outside, the rain is a soft static behind the glass.",
+];
+const FEEL_AMBIENT = [
+  "The air by the kitchen window is damp and a few degrees colder — the chill of the rain coming through the old glass.",
+  "Warm where you're standing, cooler toward the window. The radiator under the sill is doing its slow, ticking best.",
+  "The far sofa cushion holds a patch of warmth where Cracker has been. The rest of the room is cool and still.",
+  "Cool, faintly damp air, the way an old apartment feels in the rain. The floorboards are cold underfoot.",
+];
+const NEEDLE_DROPS = [
+  "The needle finds the groove with a soft crackle and a pop.",
+  "A second of surface hiss, then the music lifts up out of it.",
+  "You lower the tonearm — the dust-pop, and the room changes shape around the sound.",
+  "The platter comes up to speed; the needle catches, crackles, and it begins.",
+];
+const THINK_LINES = [
+  "You think about the week. You think about the rain. Cracker shifts in her sleep and resettles.",
+  "Your mind wanders — nowhere in particular, which is the nicest place it goes.",
+  "You think about the letter on the disk, then about not thinking about it, and let it drift off.",
+  "You stand there a moment with your own thoughts. They're quiet today. The rain helps.",
+  "Something half-formed about the afternoon, about people you haven't called. It dissolves before it's anything.",
+];
+const REMEMBER_LINES = [
+  "You let yourself remember something for a minute — the creek in Virginia, maybe, off one of those unlabeled tapes. It's good, mostly. You keep it to yourself and let it go.",
+  "A memory surfaces, unasked — a night, a song, somebody laughing in the next room. You hold it a second, then set it down gently.",
+  "You remember being somewhere else, some other rain. The details have gone soft, worn smooth from handling. You let them be.",
+];
+const SIGH_LINES = [
+  "You let out a long breath. Somewhere the radiator ticks in agreement.",
+  "A sigh — the deep kind, the kind that empties you out a little. The room absorbs it.",
+  "You exhale slowly. Nothing's wrong, exactly. It's just that kind of grey, weightless morning.",
+];
+
+// Liner-note moments for records/cassettes — what you actually find on a sleeve.
+// Keyed by item id; gameRead() uses these when present, else a generic line.
+// Kept here in engine.js (not world.js) so it travels with the cache-busted
+// entry module — a stale sibling module can't leave this import unresolved.
+const LINER = {
+  'marquee moon':   "Inner sleeve, small type: produced by Tom Verlaine and Andy Johns, recorded at A&R Studios, New York. Someone — not you — has written under the track list in blue ballpoint: side two, 'Guiding Light,' with a little star beside it.",
+  'ramones':        "Back cover: the band against a brick wall in leather jackets and torn jeans. Fourteen songs, total time 29:04, printed like a dare. A dedication to the kids. Sire Records, 1976.",
+  'london calling':  "Gatefold, the Pennie Smith shot of the bass coming apart mid-swing. The liner thanks everybody, down to 'the baker.' Nothing on the sleeve about the unlisted song at the end of side four — but you know it's there.",
+  'horses':         "Mapplethorpe's photograph on the front: Patti in a white shirt, jacket hooked over one shoulder. Inside, the dedication and a scrap of the 'Land' lyrics. The 'do the watusi' line is underlined — by you, years ago, in pencil.",
+  'dark side':      "The prism on black. The two posters and the stickers are long gone from this copy. On the inner sleeve, the heartbeat and the line about the dark side of the moon — and a coffee ring someone left over the word 'lunatic.'",
+  'white album':    "The plain white cover, the embossed number worn nearly flat — you can just feel it under your thumb, a low five digits. The fold-out poster is creased into eighths. The lyric sheet has a tear mended with tape gone amber.",
+  'doolittle':      "4AD's stark sleeve, the monkey with the halo. Lyrics in that small all-caps face. 'Debaser' up top. The corner of the inner sleeve has gone soft from being pulled out and pushed back so many times.",
+  'daydream nation': "The Gerhard Richter candle on the cover, double LP. The inner sleeves run the long pieces down side four. Thurston, Kim, Lee, Steve. A pencil tick sits beside 'Teen Age Riot,' though you don't remember making it.",
+  'let it be':      "The Replacements, not the Beatles — four guys on a rooftop in Minneapolis. Twin/Tone. The back lists 'Androgynous,' 'Unsatisfied,' 'Answering Machine.' You've played all three until the grooves went grey.",
+  'revolver':       "Klaus Voormann's collage — faces and hair tangled together in line and photo. The labels are the right vintage. Every song credited to Lennon–McCartney, which was never quite the whole story.",
+  'bollocks':       "Day-glo pink and yellow, the ransom-note lettering. The back is just the song titles, no thank-yous, no producer worth naming. Virgin, 1977. The sleeve corner is split and re-taped with masking tape.",
+  // Cassettes
+  'wonderwear music': "Touch Me Zoo, the local band. A hand-folded J-card, a Xeroxed drawing of a zoo on the front. The track list is in Seven's handwriting. Side B just reads 'the pool song + whatever.' You and Seven recorded half of it.",
+  'automatic':      "R.E.M., dubbed to tape — the J-card isn't the real one, it's an index card cut down, 'AFTP' on the spine, the tracks written out in your own cramped print. The last two are missing where the dub ran out of tape.",
+};
 
 // ── Status panel ──────────────────────────────────────────────────────────
 function cwdDisplay() {
@@ -426,6 +559,21 @@ function gameTake(args) {
     return;
   }
 
+  // Take everything — the classic
+  if (/^(all|everything|it all|every ?thing)$/.test(word)) {
+    addLine("You can't carry the whole apartment. Most of it's better off right where it is — pick things up one at a time, like a person.");
+    return;
+  }
+
+  // The cat is not a takeable item, but people will try
+  if (/^(cat|cracker|kitty|kitten|the cat)$/.test(word)) {
+    addLine(GameState.seated
+      ? 'You scoop Cracker into your lap. She resettles with a small grumble and goes back under. You are now, officially, furniture.'
+      : 'You gather her up. She goes boneless and heavy, the way they do, and makes it clear she was fine where she was. You set her back down. She was right.');
+    ContextManager.setFocus('cat', 'scenery');
+    return;
+  }
+
   // Taking a single pen from the desk cup
   if (/^(pen|pens|a pen|the pen|the pens)$/.test(word)) {
     if (!ensureArea('desk')) return;
@@ -746,6 +894,19 @@ function gameRead(args) {
     return;
   }
 
+  // Records / cassettes / VHS — read the sleeve, the back cover, the label
+  if (it.shelved || it.shelvedTape || it.shelvedVHS) {
+    GameState.lastItem = it.id;
+    addLine(typeof it.examDesc === 'function' ? it.examDesc() : it.examDesc);
+    if (it.shelvedVHS)
+      addLine("You turn the case over. Whatever was printed there has mostly faded; it's the handwriting on the spine that tells you anything.", 'dim');
+    else {
+      const liner = LINER[it.id];
+      addLine(liner || "You turn it over and read the back — the song titles, the personnel, the small thank-yous set in tiny type. The good part of owning the physical thing.", 'dim');
+    }
+    return;
+  }
+
   if (!it.content) { addLine(`There's nothing to read on ${it.label}.`); return; }
   GameState.lastItem = it.id;
   addLine('');
@@ -797,9 +958,30 @@ function gameExamine(args) {
     addLine(GameState.seated
       ? `You're sitting on the sofa, ${carrying}.`
       : `You're standing in the living room, ${carrying}.`);
+    addLine(pick([
+      "Sweatpants, a T-shirt gone soft from washing, socks that don't match. Hair doing its own thing. A few days of not-quite-beard.",
+      "You catch yourself in the dark TV screen — rumpled, unhurried, a person with nowhere to be. Not the worst look.",
+      "You could use a shower and a haircut, in that order, neither one urgent. The morning isn't asking much of you.",
+    ]), 'dim');
     return;
   }
   if (/^(nothing|air|darkness)$/.test(word)) { addLine('Right.'); return; }
+  if (/^(mirror|reflection|my reflection)$/.test(word)) { addLine("The only mirror's in the bathroom, off the map. You've got a rough sense of yourself anyway: rumpled, unshaven, hair with its own agenda. A face that's had enough sleep and not nearly enough coffee."); return; }
+  // Cracker moves around — examine her wherever she actually is, not just the sofa
+  if (/^(cat|cracker|kitty|kitten)$/.test(word)) {
+    const catArea = (GameState.catPos === 'bowl' || GameState.catPos === 'windowsill') ? 'kitchen' : 'sofa';
+    if (GameState.playerArea !== catArea) {
+      const whereSpot = GameState.catPos === 'bowl' ? 'at her food bowl in the kitchen'
+                      : GameState.catPos === 'windowsill' ? 'up on the kitchen windowsill'
+                      : 'over on the sofa';
+      addLine(`From here she's just a shape — she's ${whereSpot}. Head over for a better look.`);
+      return;
+    }
+    ContextManager.setFocus('cat', 'scenery');
+    addLine(SCENERY.cat.desc());
+    return;
+  }
+  if (/^(out|out the window|out window|the street|street)$/.test(word)) { gameWindowView(); return; }
 
   // For generic words, check what the player is holding before falling through to scenery
   if (/^(tape|cassette|vhs|video)$/.test(word)) {
@@ -877,6 +1059,7 @@ function gameToggle(args, on) {
     return;
   }
   const word = args.join(' ');
+  if (/\bradio\b/.test(word)) { addLine("No radio in here, exactly — but the boombox pulls in FM. Try  turn on boombox."); return; }
   const sc   = findScenery(word);
   if (!sc || !sc.toggle) { addLine(`You can't turn that ${on ? 'on' : 'off'}.`); return; }
 
@@ -974,8 +1157,14 @@ function gamePlay(args) {
     else                 addLine(`You pop ${it.label} into the boombox.`);
     GameState.cassettePlaying = it.label;
     ContextManager.setFocus(it.id, 'item');
-    if (GameState.boomBoxOn) addLine('The tape starts rolling.', 'dim');
-    else           addLine('Turn the boombox on to play.', 'dim');
+    if (GameState.boomBoxOn) {
+      addLine('The tape starts rolling.', 'dim');
+      const _snd = LISTEN_DESC[it.id];
+      if (_snd) addLine(_snd, 'dim');
+      if (GameState.catPos === 'sofa') GameState.catPos = 'awake';
+    } else {
+      addLine('Turn the boombox on to play.', 'dim');
+    }
     return;
   }
 
@@ -987,7 +1176,10 @@ function gamePlay(args) {
     else               addLine(`You set ${it.label} on the turntable and lower the needle.`);
     GameState.recordPlaying = it.label;
     ContextManager.setFocus(it.id, 'item');
-    addLine('The room fills with music.', 'dim');
+    addLine(pick(NEEDLE_DROPS), 'dim');
+    const _snd = LISTEN_DESC[it.id];
+    if (_snd) addLine(_snd, 'dim');
+    if (GameState.catPos === 'sofa') GameState.catPos = 'awake';
     return;
   }
 
@@ -1047,6 +1239,7 @@ function gameOpen(args) {
     addLine('You open the fridge. Cold air spills out.');
     if (items.length) { addLine('Inside: ' + items.map(it => it.label).join(', ') + '.', 'dim'); ContextManager.setFocus(items[0].id, 'item'); }
     else addLine('Just the leftovers.', 'dim');
+    if (GameState.catPos !== 'bowl') moveCat('bowl', 'Cracker materializes at her food bowl out of nowhere, suddenly very interested. The fridge does that to her.');
     return;
   }
   if (/kitchen drawer|knife drawer|drawer by|silverware|utensil/.test(word)) {
@@ -1100,9 +1293,10 @@ function gameOpen(args) {
     GameState.windowOpen = true;
     addLine('You push the window open a crack. The damp air comes through immediately.');
     addLine('The rain fills the room.', 'dim');
+    if (GameState.catPos === 'sofa' || GameState.catPos === 'awake') moveCat('windowsill', "Cracker is up on the sill before you've even let go of the sash, nose to the gap.");
     return;
   }
-  if (/door/.test(word)) { addLine("You're not going anywhere right now."); return; }
+  if (/door/.test(word)) { gameLeave('door'); return; }
   addLine("You can't open that.");
 }
 
@@ -1469,9 +1663,14 @@ function gameSit(args) {
   if (where === 'chair') {
     addLine('You drop into the desk chair and scoot up to the monitor.');
   } else {
-    if (GameState.vhsPlaying && GameState.tvOn) addLine(`You sink into the sofa. Cracker shifts and presses against your leg. ${cap(GameState.vhsPlaying)} is on.`);
-    else if (GameState.tvOn)          addLine("You sink into the sofa. Cracker shifts and presses against your leg. You watch Hogan's Heroes.");
-    else                    addLine('You sink into the sofa. Cracker shifts and presses against your leg. The room is quiet.');
+    const back = GameState.catPos !== 'windowsill';
+    if (back) GameState.catPos = 'sofa';
+    const catClause = back
+      ? 'Cracker shifts and presses warm against your leg.'
+      : "The cushion is still warm where Cracker was; she's over on the windowsill now, unbothered.";
+    if (GameState.vhsPlaying && GameState.tvOn) addLine(`You sink into the sofa. ${catClause} ${cap(GameState.vhsPlaying)} is on.`);
+    else if (GameState.tvOn)          addLine(`You sink into the sofa. ${catClause} You watch Hogan's Heroes.`);
+    else                    addLine(`You sink into the sofa. ${catClause} The room is quiet.`);
   }
 }
 
@@ -1567,8 +1766,12 @@ function gameGo(args) {
   }
   if (/^(sofa|couch)$/.test(dest)) { GameState.playerArea = 'sofa'; gameSit(['sofa']); return; }
   if (/^(down|floor)$/.test(dest))  { gameSit([]); return; }
-  if (/^(outside|out|door|front door|leave|exit)$/.test(dest)) {
-    addLine("You're not going anywhere right now.");
+  if (/^(outside|out|door|front door|leave|exit|home|away)$/.test(dest)) {
+    gameLeave(dest);
+    return;
+  }
+  if (/^(work|job|office|class|campus|school|store|acme|theft way|wawa|market|bar|gym|library|coffee|coffee shop|cafe|bus|septa|bank|laundromat)\b/.test(dest) || /\bget coffee\b/.test(dest)) {
+    gameLeave(dest);
     return;
   }
   if (/^(up|upstairs|stairs)$/.test(dest)) {
@@ -1591,6 +1794,71 @@ function gameGo(args) {
     return;
   }
   addLine("You wander a bit but end up in the same spot.");
+}
+
+// Every attempt to leave the apartment routes here. The room has no exits —
+// but a flat refusal would be the worst writing in the game, so instead the
+// responses escalate: practical → atmospheric → a single surreal dream beat →
+// a gentle rotating pool. State: GameState.leaveAttempts, GameState.dreamed.
+function gameLeave(reason = '') {
+  autoStand();
+  GameState.leaveAttempts++;
+  const n = GameState.leaveAttempts;
+  const r = (reason || '').toLowerCase();
+
+  // First attempt — practical, lightly tailored to where they thought they'd go
+  if (n === 1) {
+    if (/coffee|cafe|store|acme|theft|wawa|market|bank/.test(r))
+      addLine("You think about pulling on shoes and walking somewhere for coffee. Then you remember you've got coffee — or at least the makings of it — ten feet away in the kitchen. The thought dissolves.");
+    else if (/work|job|class|campus|school|office|library/.test(r))
+      addLine("It's a Tuesday, but it isn't that kind of Tuesday. Whatever 'work' is this week, it'll survive a rainy morning without you. You stay put.");
+    else
+      addLine("You go to the front door and put a hand on the knob. Through it you can hear the rain really coming down. Wherever you were going, it can wait.");
+    return;
+  }
+  if (n === 2) {
+    addLine("You crack the door a few inches. Wet air, the smell of the street, a SEPTA bus hissing past on the corner. A block down, somebody's stoop sale is getting rained out. You close it again.");
+    return;
+  }
+  if (n === 3) {
+    addLine("Hand on the knob again. But where would you even go? Everything worth doing today is already in this room — the records, the cat, the letter you still haven't read. Out there is just weather.");
+    return;
+  }
+  // Fourth attempt — the dream beat, once. You doze, wake, and one small thing
+  // has changed while you weren't watching.
+  if (n === 4 && !GameState.dreamed) {
+    GameState.dreamed = true;
+    addLine("You put your hand on the cold metal of the knob, and you mean it this time, and—");
+    addLine('');
+    addLine("—you blink, and you're on the sofa.");
+    addLine("The light has shifted. The rain is softer. You don't remember sitting down.", 'dim');
+    if (!GameState.recordPlaying) {
+      GameState.recordPlaying = 'Marquee Moon';
+      addLine("There's a record turning on the platter — Marquee Moon — and you have no memory of putting it on.");
+    } else {
+      addLine("Cracker is at the other end of the sofa now, in a square of pale light, and you don't remember her moving.");
+    }
+    GameState.catPos = 'sofa';
+    addLine('');
+    addLine("The door is still over there. It can keep.", 'dim');
+    GameState.seated = true;
+    GameState.playerArea = 'sofa';
+    return;
+  }
+  if (n === 5) {
+    addLine("You catch yourself drifting toward the door again, and this time you laugh a little at the pattern of it. Fine. Not yet. Maybe this afternoon.");
+    return;
+  }
+  // Sixth attempt onward — a gentle rotating pool
+  const pool = [
+    "The door isn't going anywhere. Neither, it's becoming clear, are you.",
+    "You stand by the door a moment and let the rain make the decision for you.",
+    "Out there it's all errands and wet socks. In here it's this. You stay.",
+    "You almost reach for the knob. Almost. Your hand has other ideas.",
+    "Some mornings are for leaving. This is not shaping up to be one of them.",
+    "You look at the door. The door looks at you. Stalemate, as usual.",
+  ];
+  addLine(pool[(n - 6) % pool.length]);
 }
 
 function gameWatch(args) {
@@ -1636,7 +1904,8 @@ function gameListen(args) {
     } else if (GameState.scrappleInPan && GameState.stoveOn && !GameState.scrappleCooked) {
       addLine('A steady sizzle from the kitchen. The scrapple is working.');
     } else {
-      addLine(GameState.windowOpen ? 'Rain through the window. The fridge hums in the kitchen.' : 'The fridge hums in the kitchen. Rain against the glass outside.');
+      addLine(pick(GameState.windowOpen ? LISTEN_IDLE_OPEN : LISTEN_IDLE_CLOSED));
+      if (GameState.catPos === 'sofa') addLine('Under it all, Cracker breathing, slow and even.', 'dim');
     }
     return;
   }
@@ -1738,11 +2007,11 @@ function gameSmell(args) {
   }
   if (/record|vinyl|sleeve|album/.test(target)) {
     if (GameState.recordPlaying) addLine('Warm vinyl. The needle is working.');
-    else addLine('Old vinyl and cardboard. A good smell.');
+    else addLine(pick(['Old vinyl and cardboard. A good smell.', 'That specific used-record-store smell — dust, sleeve, a little mildew, years of handling.', 'Cardboard and warm dust. The smell of a thing pulled out and pushed back a thousand times.']));
     return;
   }
   if (/cat|cracker|kitty/.test(target)) {
-    addLine('Warm fur and a faint dusty-sweet smell. Clean cat.');
+    addLine(pick(['Warm fur and a faint dusty-sweet smell. Clean cat.', 'She smells like warm laundry and, very faintly, like the windowsill she sleeps on.', 'Warm, slightly toasty fur. A good smell. You will not admit how good.']));
     return;
   }
   if (/scrapple/.test(target)) {
@@ -1794,7 +2063,7 @@ function gameTouch(args) {
   if (/answering machine|machine/.test(word)) { addLine(`Plastic. The play button has a worn spot in the center.${GameState.messageHeard ? '' : ' The light pulses under your finger.'}`); return; }
   if (/vcr/.test(word))                { addLine(GameState.vcrOn ? 'Warm plastic. The eject button clicks satisfyingly.' : 'Cool plastic. The eject button clicks satisfyingly.'); return; }
   if (/floppy|disk/.test(word))       { addLine(GameState.floppyInserted ? 'You run a finger along the drive slot. The machine hums faintly.' : 'Smooth plastic. A little warm from being in your pocket.'); return; }
-  if (/cat|cracker|kitty/.test(word)) { addLine(GameState.seated ? 'Warm and soft. She shifts slightly but stays asleep.' : 'You give her a gentle pet. Warm fur, slow breathing. She doesn\'t wake up.'); return; }
+  if (/cat|cracker|kitty/.test(word)) { addLine(catPetLine()); return; }
   if (/stove|burner|range/.test(word)) { addLine(GameState.stoveOn ? 'Hot. You pull your hand back.' : 'Cool metal. The knob feels well-used.'); return; }
   if (/pan|skillet|cast iron/.test(word)) { addLine((GameState.stoveOn || GameState.scrappleCooked) ? 'Very hot. Not touching that.' : 'Smooth, heavy cast iron. Decades of seasoning.'); return; }
   if (/knife/.test(word))              { addLine('A solid wooden handle. The blade is sharp — careful.'); return; }
@@ -2148,7 +2417,7 @@ const VERB_REGISTRY = [
   // ── Multi-word pattern dispatch ──────────────────────────────────────────
   { test: (cmd, args, rest) => cmd === 'look'  && args[0] === 'at', exec: (cmd, args, rest) => { gameExamine(args.slice(1)); } },
   { test: (cmd, args, rest) => cmd === 'look'  && /^around/.test(rest), exec: (cmd, args, rest) => { gameLook(); } },
-  { test: (cmd, args, rest) => cmd === 'look'  && /^(out|outside|through)/.test(rest), exec: (cmd, args, rest) => { gameExamine(['window']); } },
+  { test: (cmd, args, rest) => cmd === 'look'  && /^(out|outside|through)/.test(rest), exec: (cmd, args, rest) => { gameWindowView(); } },
   { test: (cmd, args, rest) => cmd === 'look'  && (args[0] === 'in' || args[0] === 'inside' || args[0] === 'into'), exec: (cmd, args, rest) => { gameExamine(args.slice(1)); } },
   { test: (cmd, args, rest) => cmd === 'where' && /^am\b/.test(rest), exec: (cmd, args, rest) => { handleGameCommand('where'); } },
   { test: (cmd, args, rest) => cmd === 'pick'  && args[0] === 'up', exec: (cmd, args, rest) => { gameTake(args.slice(1)); } },
@@ -2279,7 +2548,176 @@ const VERB_REGISTRY = [
   { test: (cmd, args, rest) => cmd === 'fry'   && /scrapple|breakfast|it/.test(rest), exec: (cmd, args, rest) => { gameCook(['scrapple']); } },
   { test: (cmd, args, rest) => cmd === 'fry'   && !rest, exec: (cmd, args, rest) => { gameCook([]); } },
   { test: (cmd, args, rest) => cmd === 'watch' && /tv|television|set|show|hogan|screen/.test(rest), exec: (cmd, args, rest) => { gameWatch(args); } },
-  
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  CONTENT EXPANSION (wp-sim-93) — deeper handling of common, absurd,
+  //  era-appropriate, and frustrated inputs. Voice: dry, warm, West Philly '93.
+  //  Placed before the switch entries so cmd+rest patterns win over bare verbs.
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── Protect the cat from any and all violence ────────────────────────────
+  { test: (cmd, args, rest) => /^(kick|hit|punch|hurt|slap|kill|murder|attack|smack|strangle|drown|stab|shoot)$/.test(cmd) && /\b(cat|cracker|kitty|kitten)\b/.test(rest),
+    exec: () => { addLine("You would never. Cracker has done nothing this morning but sleep and be soft. Leave her be."); } },
+
+  // ── Cat: pick up / hold / feed / talk / follow / wake ────────────────────
+  { test: (cmd, args, rest) => /^(lift|hold|carry|cradle)$/.test(cmd) && /\b(cat|cracker|kitty|kitten)\b/.test(rest), exec: () => {
+    addLine(GameState.seated
+      ? 'You scoop Cracker into your lap. She resettles with a small grumble and goes back under. You are now, officially, furniture.'
+      : 'You gather her up. She goes boneless and heavy, the way they do, and makes it clear she was fine where she was. You set her back down. She was right.');
+    ContextManager.setFocus('cat', 'scenery');
+  } },
+  { test: (cmd) => cmd === 'feed', exec: () => { addLine("Cracker's bowl is in the kitchen and it's already got food in it. She'll get to it when she gets to it. That's the arrangement."); } },
+  { test: (cmd, args, rest) => /^(talk|speak|say|whisper|tell|ask)$/.test(cmd) && /\b(cat|cracker|kitty)\b/.test(rest), exec: () => { addLine(catTalkLine()); } },
+  { test: (cmd, args, rest) => cmd === 'follow' && /\b(cat|cracker|kitty)\b/.test(rest), exec: () => {
+    if (GameState.catPos === 'bowl') addLine("You follow her to the kitchen. She crunches a few pieces of food, then looks up at you like you're the strange one.");
+    else if (GameState.catPos === 'windowsill') addLine("You follow her to the window and stand alongside. She watches the rain; you watch the rain. Companionable enough.");
+    else addLine("She's asleep and going nowhere. Following her would mean sitting very still for several hours — which, honestly, is on the table.");
+  } },
+  { test: (cmd, args, rest) => cmd === 'wake' && /\b(cat|cracker|kitty)\b/.test(rest), exec: () => { addLine("You'd never. Waking a sleeping cat is a small crime against the natural order."); } },
+  { test: (cmd, args, rest) => /^(talk|speak|say|chat|converse)$/.test(cmd), exec: () => { addLine("You say a few words out loud, just to hear a voice in the room. Cracker's ear twitches. That's the whole conversation."); } },
+
+  // ── Leaving, by any other name ───────────────────────────────────────────
+  { test: (cmd) => ['escape', 'flee', 'bail', 'split'].includes(cmd), exec: (cmd, args, rest) => { gameLeave(rest || cmd); } },
+  { test: (cmd, args, rest) => cmd === 'run' && (!rest || /away|out|off/.test(rest)), exec: () => { gameLeave('run'); } },
+  { test: (cmd, args, rest) => /^(unlock|lock)$/.test(cmd) && /door/.test(rest), exec: (cmd) => { addLine(cmd === 'lock' ? "Already locked — deadbolt and chain. West Philly, 1993. You don't think about it, you just do it." : "You could. The deadbolt's right there. But unlocking it implies going somewhere, and you're not."); } },
+  { test: (cmd) => cmd === 'knock', exec: () => { addLine("You knock on your own front door. A thing you could, technically, do all morning, to no particular effect."); } },
+  { test: (cmd, args, rest) => cmd === 'answer' && /door|phone/.test(rest), exec: (cmd, args, rest) => { addLine(/phone/.test(rest) ? "The phone isn't ringing." : "Nobody knocked. It's just the rain on the door."); } },
+
+  // ── The phone ────────────────────────────────────────────────────────────
+  { test: (cmd) => ['call', 'dial', 'phone', 'ring'].includes(cmd), exec: () => {
+    addLine("You pick up the receiver. Dial tone, steady and gray.");
+    if (!GameState.messageHeard) addLine("There's a message blinking on the machine you haven't even played yet. Maybe start there.", 'dim');
+    else                         addLine("But you can't think of anyone you want to talk to before coffee. You set it back down.", 'dim');
+  } },
+
+  // ── Time / date / weather ────────────────────────────────────────────────
+  { test: (cmd, args, rest) => cmd === 'time' || (cmd === 'check' && /\b(time|clock|watch|hour)\b/.test(rest)) || (cmd === 'what' && /\btime\b/.test(rest)),
+    exec: () => { addLine("Late morning. The light through the window is flat and gray, the kind that doesn't move for hours. Somewhere between ten and eleven. Nobody's counting today."); } },
+  { test: (cmd, args, rest) => cmd === 'day' || cmd === 'date' || (cmd === 'what' && /\b(day|date)\b/.test(rest)),
+    exec: () => { addLine("A Tuesday in October, 1993. The fifth, if the machine on the desk is to be trusted. The days blur together this time of year and you've stopped minding."); } },
+  { test: (cmd) => ['weather', 'forecast'].includes(cmd), exec: () => { addLine("Rain, and then more rain. The kind that settles in for the whole day and never quite becomes a storm. October in Philadelphia."); } },
+
+  // ── Who/what am I, pockets ───────────────────────────────────────────────
+  { test: (cmd, args, rest) => cmd === 'who' || (cmd === 'what' && /\b(am i|i am|doing)\b/.test(rest)),
+    exec: () => { addLine("You're you. It's a rainy Tuesday in West Philly and there's nowhere you have to be. That's about as far as the question needs to go this morning."); } },
+  { test: (cmd, args, rest) => cmd === 'pockets' || /\bpocket/.test(rest),
+    exec: () => { addLine("You check your pockets: a SEPTA token, a guitar pick you can't actually play, a receipt gone soft, a couple of crumpled singles. The usual ballast."); } },
+  { test: (cmd) => cmd === 'what', exec: () => { addLine("Hard to say. The rain doesn't seem to know either."); } },
+
+  // ── 1993 hardware the apartment doesn't have ─────────────────────────────
+  { test: (cmd, args, rest) => cmd === 'pager' || /\bpager\b/.test(rest), exec: () => { addLine("You don't carry a pager. You're not a cardiologist and you're not a drug dealer, and that's most of the people who carry pagers."); } },
+  { test: (cmd, args, rest) => cmd === 'remote' || /\bremote\b/.test(rest), exec: () => { addLine("This television predates the idea of losing the remote. You change the channel by standing up and walking over, like a pioneer."); } },
+  { test: (cmd, args, rest) => cmd === 'radio' || /\bradio\b/.test(rest), exec: () => { addLine("No radio in here — but the boombox pulls in FM if you want it. Mostly it lives for tapes."); } },
+  { test: (cmd, args, rest) => /^(read|get|find|grab|look|fetch)$/.test(cmd) && /\b(newspaper|paper|inquirer|daily news|city paper|welcomat)\b/.test(rest),
+    exec: () => { addLine("You didn't bring a paper in this morning. The Inquirer's probably out on the stoop getting rained on. There's always the free City Paper at the coffee shop — if you ever leave."); } },
+
+  // ── DOS muscle memory, in a living room ──────────────────────────────────
+  { test: (cmd) => ['ls', 'pwd'].includes(cmd), exec: () => { addLine("You're not at the terminal anymore. Try  look."); } },
+  { test: (cmd) => cmd === 'cd', exec: () => { addLine("You can't cd around a living room. Try  go <somewhere>."); } },
+  { test: (cmd) => cmd === 'dir', exec: () => { addLine(GameState.floppyInserted ? "Try  read floppy  to see what's on the disk." : "This isn't DOS. There's a 486 on the desk if you really need a C:\\ prompt."); } },
+  { test: (cmd) => ['mkdir', 'rmdir', 'chmod', 'grep', 'vi', 'emacs', 'ssh', 'telnet', 'finger'].includes(cmd), exec: (cmd) => { addLine(`No ${cmd} here. You left the terminal back in the other window.`); } },
+  { test: (cmd) => cmd === 'type', exec: () => { addLine(GameState.floppyInserted ? "Try  read floppy  (or  type letter.txt)." : "Nothing loaded to type out — there's no disk in the drive."); } },
+
+  // ── Floppy / disk: protect the only copy ─────────────────────────────────
+  { test: (cmd) => cmd === 'format', exec: () => { addLine("Format the disk? It holds the only copy of the only thing on it. Absolutely not."); } },
+  { test: (cmd, args, rest) => /^(copy|xcopy|diskcopy|dd)$/.test(cmd) && /floppy|disk|letter|a:/.test(rest), exec: () => { addLine("You don't have a blank to copy it onto. And some things you only get one copy of anyway."); } },
+  { test: (cmd, args, rest) => /^(delete|del|erase|shred)$/.test(cmd) && /floppy|disk|letter|a:|txt/.test(rest), exec: () => { addLine("You're not deleting that. Not this one."); } },
+  { test: (cmd, args, rest) => cmd === 'rename' && /floppy|disk|letter/.test(rest), exec: () => { addLine('It is exactly what the label says it is. "Floppy Letter 2601." That stays.'); } },
+
+  // ── Meta / interactive-fiction conventions ───────────────────────────────
+  { test: (cmd) => ['again', 'g'].includes(cmd), exec: () => {
+    const prev = [...GameState.gHistory].reverse().find(c => !/^(again|g)$/i.test(c.trim()));
+    if (!prev) { addLine("You haven't done anything to repeat yet."); return; }
+    handleGameCommand(prev);
+    return 'QUIT';   // the recursive call already reset the prompt; skip the outer trailer
+  } },
+  { test: (cmd) => cmd === 'undo', exec: () => { addLine("There's no undo. You live with your choices here, even the small ones. Especially the small ones."); } },
+  { test: (cmd) => cmd === 'save', exec: () => { addLine("Nothing here needs saving. It'll all still be here — the rain, the cat, the message you haven't played — whenever you come back."); } },
+  { test: (cmd) => cmd === 'restore', exec: () => { addLine("There's nothing to restore. This is the only version of this morning there is."); } },
+  { test: (cmd) => cmd === 'version', exec: () => { addLine(`West Philly Simulator 93 — BETA v${VERSION}. A room, a cat, a letter.`); } },
+  { test: (cmd) => cmd === 'diagnose', exec: () => { addLine("You're in perfect health, give or take a caffeine deficiency and a vague sense you should be doing something with your life."); } },
+  { test: (cmd) => ['verbose', 'brief', 'superbrief'].includes(cmd), exec: () => { addLine("There's only one room, and it tells you exactly as much as it feels like. Verbosity is academic here."); } },
+  { test: (cmd) => cmd === 'plover', exec: () => { addLine("A faint smell of pine. Then nothing. (Wrong cave. Wrong decade.)"); } },
+  { test: (cmd) => cmd === 'q', exec: () => {
+    addLine('');
+    addLine('You leave the living room.', 'dim');
+    addLine('──────────────────────────────────────────────────────────────────', 'dim');
+    addLine('');
+    SystemState.state = 'shell';
+    showPrompt();
+    return 'QUIT';
+  } },
+
+  // ── Daily life in the unmodeled rooms ────────────────────────────────────
+  { test: (cmd, args, rest) => /^(shower|bathe)$/.test(cmd) || (cmd === 'take' && /\b(shower|bath)\b/.test(rest)), exec: () => { addLine("Maybe later. The hot water in this building takes a while to think about it, and the bathroom's a whole separate decision."); } },
+  { test: (cmd) => ['brush', 'floss', 'shave'].includes(cmd), exec: () => { addLine("That's a bathroom errand, and the bathroom's down the hall, off the map. You'll get to yourself eventually."); } },
+  { test: (cmd, args, rest) => cmd === 'wash' && !/dish/.test(rest), exec: (cmd, args, rest) => { addLine(/hand/.test(rest)
+      ? (GameState.playerArea === 'kitchen' ? "You rinse your hands at the kitchen sink and dry them on your jeans." : "You step to the kitchen sink, rinse your hands, and dry them on your jeans.")
+      : "Face, hair, the whole production — that's a bathroom errand, and the bathroom's off the map. You'll get to yourself eventually."); } },
+  { test: (cmd, args, rest) => /^(dress|undress)$/.test(cmd) || (cmd === 'get' && /dressed/.test(rest)) || (cmd === 'put' && /\b(clothes|pants|shirt|shoes)\b/.test(rest)), exec: () => { addLine("You're dressed enough for a day with no plans. Sweatpants and yesterday's shirt count, by the generous standards of a rainy Tuesday."); } },
+  { test: (cmd, args, rest) => /^(find|look|get)$/.test(cmd) && /\b(clothes|wardrobe|closet)\b/.test(rest), exec: () => { addLine("Your clothes are mostly on the floor of the back room, or on you. The laundry situation is best described as 'ongoing.'"); } },
+  { test: (cmd, args, rest) => cmd === 'make' && /\bbed\b/.test(rest), exec: () => { addLine("The bed's in the back room, unmade, and on a morning like this it's going to stay that way. No notes."); } },
+  { test: (cmd) => cmd === 'stretch', exec: () => { addLine(pick(["You stretch until something in your back pops — the good kind. Cracker watches with one eye and declines to follow your example.", "You reach for the ceiling, up on your toes, and hold it. Something unknots between your shoulders. You come down an inch taller.", "A long, full-body stretch, the kind that ends in an involuntary noise. The cat does a more elegant version of the same thing without getting up."])); } },
+  { test: (cmd) => ['exercise', 'workout', 'pushups', 'situps', 'jog'].includes(cmd), exec: () => { addLine("Not today. Possibly not this decade. The rain is an excellent excuse and you intend to use it."); } },
+  { test: (cmd) => ['meditate', 'om'].includes(cmd), exec: () => { addLine(pick(["You close your eyes and try to empty your mind. The rain helps. A car alarm two blocks over does not. Close enough.", "You sit, breathe, and try to think about nothing. You make it almost four seconds before you're thinking about coffee. Progress.", "Eyes shut, hands loose. The rain does most of the work. For a minute there's just the sound of it and the warm weight of the room."])); } },
+  { test: (cmd) => ['write', 'journal', 'diary'].includes(cmd), exec: () => { addLine("You think about getting the notebook out and putting some of the morning down. You think about it for a good while. The thinking is the nice part. The pen stays where it is."); } },
+  { test: (cmd) => ['draw', 'sketch', 'doodle'].includes(cmd), exec: () => { addLine("You doodle in the margin of something — a spiral, a little boombox, a cat that looks nothing like the cat. Nothing you'd keep."); } },
+  { test: (cmd) => cmd === 'roll', exec: () => { addLine("You quit the cigarettes back in the spring. As for the other kind of rolling — not before noon, and not alone on a Tuesday. Some other day."); } },
+  { test: (cmd) => cmd === 'yawn', exec: () => { addLine(pick(["A big one, jaw-cracking. Across the sofa, Cracker yawns too, in her sleep. Contagious across species.", "You yawn so wide your eyes water. The morning is doing its slow gravitational thing on you.", "A yawn rolls through you. You ride it out. The day is in no rush and neither, it turns out, are you."])); } },
+  { test: (cmd) => ['whistle', 'hum'].includes(cmd), exec: () => { addLine(GameState.recordPlaying ? `You hum along with ${GameState.recordPlaying}, mostly in tune.` : (GameState.cassettePlaying ? `You hum along with ${GameState.cassettePlaying}.` : "You whistle a few bars of something you can't place. The cat declines to review it.")); } },
+  { test: (cmd) => cmd === 'clap', exec: () => { addLine(pick(["You clap once. Louder than you expected in the quiet. Cracker's ear swivels, unimpressed.", "Two sharp claps. The sound dies fast in all the soft furniture. The cat opens one eye, registers a non-emergency, closes it."])); if (GameState.catPos === 'sofa') GameState.catPos = 'awake'; } },
+  { test: (cmd) => ['nod', 'shrug'].includes(cmd), exec: () => { addLine("You do, to no one in particular. It feels appropriate."); } },
+  { test: (cmd) => cmd === 'sigh', exec: () => { addLine(pick(SIGH_LINES)); } },
+  { test: (cmd) => /^(breathe|inhale)$/.test(cmd), exec: () => { addLine(pick(["You take a slow breath. Rain, old paper, a ghost of coffee. The apartment smells like itself.", "A deep breath in, held, let go. The room settles around you. You feel marginally more like a person.", "You breathe in the damp morning air. Wet street, old wood, cat, coffee. Home, more or less."])); } },
+  { test: (cmd, args, rest) => ['hug', 'cuddle', 'snuggle'].includes(cmd), exec: (cmd, args, rest) => {
+    if (/cat|cracker|kitty/.test(rest)) addLine("You lean down and put your face in her fur for a second. She smells like warm laundry. She tolerates it, barely.");
+    else if (GameState.seated)          addLine("You pull the quilt around yourself. Good enough.");
+    else                                addLine("You hug yourself. It's been that kind of week. No witnesses but the cat.");
+  } },
+
+  // ── Chores and the records ───────────────────────────────────────────────
+  { test: (cmd, args, rest) => cmd === 'do' && /\bdish/.test(rest), exec: () => { addLine("You run the water and wash the few dishes in the sink. They can air-dry on the rack. Small victories."); } },
+  { test: (cmd, args, rest) => /^(tidy|clean|straighten|declutter|vacuum|sweep)$/.test(cmd) && !/dish/.test(rest), exec: () => { addLine("You look around. It's not dirty, exactly — lived-in. Records out of their sleeves, books face-down, a quilt that's seen things. You decide it has character and leave it be."); } },
+  { test: (cmd, args, rest) => /^(sort|organize|organise|alphabetize|reorganize|reorganise|arrange)$/.test(cmd) && /record|vinyl|shelf|collection|\blp/.test(rest), exec: () => { addLine("You start to put the records in some kind of order and immediately get lost reading a back cover. Twenty minutes evaporate. They're no more sorted than before, but you feel closer to them."); } },
+  { test: (cmd) => ['sort', 'organize', 'organise', 'alphabetize', 'reorganize', 'arrange'].includes(cmd), exec: () => { addLine("You straighten a stack of something, lose the thread halfway through, and call it done."); } },
+  { test: (cmd, args, rest) => cmd === 'count' && /record|book|tape|cassette|vinyl/.test(rest), exec: () => { addLine("You start counting. You lose track somewhere in the C's, distracted by an album you forgot you owned. The number was never the point."); } },
+
+  // ── Atmosphere & the morning ─────────────────────────────────────────────
+  { test: (cmd, args, rest) => cmd === 'remember' || cmd === 'reminisce' || (cmd === 'think' && /seven|her|him|them|virginia|creek/.test(rest)), exec: () => { addLine(pick(REMEMBER_LINES)); } },
+  { test: (cmd, args, rest) => cmd === 'think' && rest, exec: () => { addLine("You think about it — the rain, the day, the long flat stretch of hours ahead with nothing in them. It isn't a bad feeling. Your mind wanders off it after a while."); } },
+  { test: (cmd) => ['daydream', 'zone'].includes(cmd), exec: () => { addLine("You go somewhere for a while behind your own eyes. When you come back, the rain is exactly where you left it."); } },
+  { test: (cmd, args, rest) => ['curtains', 'blinds'].includes(cmd) || /curtain|blinds|drapes/.test(rest), exec: () => { addLine("No curtains, no blinds — just the window and the gray day leaning against it. You've been meaning to hang something. Not today."); } },
+
+  // ── Frustration, handled gently ──────────────────────────────────────────
+  { test: (cmd) => ['damn', 'damnit', 'dammit', 'goddamn', 'goddammit', 'crap', 'ugh', 'argh', 'arg', 'grr', 'fml', 'bah'].includes(cmd), exec: () => { addLine("You swear at the room. The room, having heard worse from you on worse mornings, doesn't take it personally."); } },
+  { test: (cmd) => ['god', 'jesus', 'christ'].includes(cmd), exec: () => { addLine("No answer from that quarter. Just the rain, the fridge, and the cat breathing."); } },
+
+  // ── Looking under / behind / searching ───────────────────────────────────
+  { test: (cmd, args, rest) => cmd === 'look' && /^(under|underneath|behind|beneath)\b/.test(rest), exec: (cmd, args, rest) => {
+    const t = rest.replace(/^(under|underneath|behind|beneath)\s+(the\s+)?/, '');
+    if      (/sofa|couch|cushion/.test(t)) addLine("You feel down the side of the cushions: forty cents, a pen cap, a guitar pick, and a startling amount of cat hair. Nothing worth the reach.");
+    else if (/rug|carpet/.test(t))         addLine("You lift the corner of the rug. Bare floorboards and the ghost of a coffee ring. Nothing hidden here.");
+    else if (/bed/.test(t))                addLine("The bed's in the back room. Under it is a country you don't visit.");
+    else if (/fridge|stove|counter|sink/.test(t)) addLine("You'd rather not know what's under there. Some things you leave to the building.");
+    else if (/tv|television|vcr/.test(t))  addLine("Dust, cables, and the warm electric smell of a set that's been on too long. Nothing else.");
+    else if (/desk/.test(t))               addLine("Just the drawer and your own knees. Try  open drawer.");
+    else                                   addLine("Nothing under there but dust and the usual apartment archaeology.");
+  } },
+  { test: (cmd, args, rest) => cmd === 'search' || cmd === 'find' || (cmd === 'look' && /^(through|for)\b/.test(rest) && !/remote|paper|clothes|newspaper|inquirer|daily news|city paper/.test(rest)), exec: () => { addLine("You poke around, but this isn't that kind of room. Nothing's hidden here on purpose. What you see is what there is."); } },
+
+  // ── Depth pass: sensory, the window, interiority ─────────────────────────
+  { test: (cmd, args, rest) => cmd === 'feel' && (!rest || /^(the\s+)?(air|room|cold|warmth|temperature|around|chill|atmosphere)\b/.test(rest)), exec: () => { addLine(pick(FEEL_AMBIENT)); } },
+  { test: (cmd, args, rest) => cmd === 'watch' && /\b(rain|window|street)\b/.test(rest) || (cmd === 'watch' && /^outside/.test(rest)), exec: () => {
+    addLine(pick([
+      "You watch the rain a while. It has nothing to prove and nowhere to be, same as you.",
+      "You watch it come down. The street goes glassy. Time does that loose, unspooling thing it does on mornings like this.",
+      "You stand at the window and watch the rain. It's enough, for a few minutes, to just do that.",
+    ]));
+    if (GameState.catPos === 'sofa' || GameState.catPos === 'awake') moveCat('windowsill', 'Cracker joins you on the sill, and the two of you watch it together.');
+  } },
+  { test: (cmd, args, rest) => cmd === 'mirror' || /\bmirror\b/.test(rest), exec: () => { addLine("The only mirror's in the bathroom, off the map. You've got a rough sense of yourself anyway: rumpled, unshaven, hair with its own agenda. A face that's had enough sleep and not nearly enough coffee."); } },
+  { test: (cmd) => cmd === 'wonder', exec: () => { addLine(pick(THINK_LINES)); } },
+
   // ── Switch cases ──────────────────────────────────────────────
   { test: (cmd) => ['look', 'l', 'describe'].includes(cmd), exec: (cmd, args, rest) => { gameLook(); } },
   { test: (cmd) => ['examine', 'x', 'inspect', 'check'].includes(cmd), exec: (cmd, args, rest) => { gameExamine(args); } },
@@ -2354,7 +2792,7 @@ const VERB_REGISTRY = [
     }
   } },
   { test: (cmd) => ['sleep', 'nap'].includes(cmd), exec: (cmd, args, rest) => { addLine("You're not tired enough for that."); } },
-  { test: (cmd) => ['think'].includes(cmd), exec: (cmd, args, rest) => { addLine('Your mind wanders.'); } },
+  { test: (cmd) => ['think'].includes(cmd), exec: (cmd, args, rest) => { addLine(pick(THINK_LINES)); } },
   { test: (cmd) => ['dance'].includes(cmd), exec: (cmd, args, rest) => { addLine('You shuffle in place for a moment.'); } },
   { test: (cmd) => ['sing'].includes(cmd), exec: (cmd, args, rest) => {
     addLine(GameState.recordPlaying ? `You hum along with ${GameState.recordPlaying}.` : 'You hum to yourself.');
@@ -2385,7 +2823,7 @@ const VERB_REGISTRY = [
   { test: (cmd) => ['pee', 'piss', 'urinate'].includes(cmd), exec: (cmd, args, rest) => { addLine('The bathroom is not modeled. You hold it.'); } },
   { test: (cmd) => ['poop', 'shit', 'defecate'].includes(cmd), exec: (cmd, args, rest) => { addLine('Absolutely not.'); } },
   { test: (cmd) => ['eat cat', 'eat cracker'].includes(cmd), exec: (cmd, args, rest) => { addLine('Cracker shifts in her sleep, instinctively aware of your depravity.'); } },
-  { test: (cmd) => ['pet cat', 'pet cracker'].includes(cmd), exec: (cmd, args, rest) => { addLine('You give her a scratch behind the ear. She doesn\'t wake up but purrs louder.'); } },
+  { test: (cmd) => ['pet cat', 'pet cracker'].includes(cmd), exec: (cmd, args, rest) => { addLine(catPetLine()); } },
   { test: (cmd) => ['sudo'].includes(cmd), exec: (cmd, args, rest) => { addLine('This is not that kind of computer.'); } },
   { test: (cmd) => ['hack'].includes(cmd), exec: (cmd, args, rest) => { addLine('You stare at the monitor. The monitor stares back.'); } },
   { test: (cmd) => ['flip table', 'flip'].includes(cmd), exec: (cmd, args, rest) => {
@@ -2449,7 +2887,7 @@ const VERB_REGISTRY = [
     }
   } },
   { test: (cmd) => ['sleep', 'nap'].includes(cmd), exec: (cmd, args, rest) => { addLine("You're not tired enough for that."); } },
-  { test: (cmd) => ['think'].includes(cmd), exec: (cmd, args, rest) => { addLine('Your mind wanders.'); } },
+  { test: (cmd) => ['think'].includes(cmd), exec: (cmd, args, rest) => { addLine(pick(THINK_LINES)); } },
   { test: (cmd) => ['dance'].includes(cmd), exec: (cmd, args, rest) => { addLine('You shuffle in place for a moment.'); } },
   { test: (cmd) => ['sing'].includes(cmd), exec: (cmd, args, rest) => {
     addLine(GameState.recordPlaying ? `You hum along with ${GameState.recordPlaying}.` : 'You hum to yourself.');

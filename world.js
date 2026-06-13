@@ -1,8 +1,14 @@
 import { GameState } from './state.js';
 import { addLine, cap } from './utils.js';
 
-export const ROOM_DESC = () =>
-`A small living room. A boxy television sits against the west wall, a VCR stacked underneath. An old sofa sits in the middle of the room, facing it — a cat curled up on one end. Records and a turntable line the south wall. Along the north wall: bookshelves at the northwest end, then a VHS shelf, then a metal desk with a PC and printer — and in the northeast corner a battered boombox and a rack of cassettes near the door to the back bedroom. In the northwest corner, a small table holds a phone and an answering machine. Kitchen along the east wall. ${GameState.windowOpen ? 'The sound of rain through the open window.' : 'The window is closed. The rain is muffled outside.'}`;
+export const ROOM_DESC = () => {
+  const cracker =
+    GameState.catPos === 'windowsill' ? 'Cracker is up on the kitchen windowsill, nose near the glass, watching the rain.'
+    : GameState.catPos === 'bowl'     ? 'Cracker is in the kitchen, hunched over her food bowl with great seriousness.'
+    : GameState.catPos === 'awake'    ? 'Cracker is awake on one end of the sofa, loafed up, watching the room through half-shut eyes.'
+    :                                   'Cracker is curled up asleep on one end of the sofa.';
+  return `A small living room, lit flat and grey by the rain-light — that shadowless morning glow that leaves everything looking faintly underwater. A boxy television sits against the west wall, a VCR stacked underneath. An old brown sofa sits in the middle of the room, a patchwork quilt thrown over its back, facing the TV. Records and a turntable line the south wall. Along the north wall: bookshelves at the northwest end, then a VHS shelf, then a metal desk with a PC and printer — and in the northeast corner a battered boombox and a rack of cassettes near the door to the back bedroom. In the northwest corner, a small table holds a phone and an answering machine. Kitchen along the east wall. The ceiling is high, the plaster cracked in a slow map up near one corner. ${cracker} ${GameState.windowOpen ? 'The sound of rain comes through the open kitchen window.' : 'The window is closed; the rain is muffled outside.'}`;
+};
 
 export const ITEMS = [
 
@@ -394,30 +400,41 @@ export const SCENERY = {
     },
   },
   turntable: {
-    names: ['turntable', 'record player', 'player', 'needle', 'platter'],
+    names: ['turntable', 'record player', 'player', 'needle', 'platter', 'tonearm'],
     desc() {
       return GameState.recordPlaying
-        ? `A turntable on a low shelf. ${GameState.recordPlaying} is on the platter, spinning.`
-        : 'A turntable on a low shelf beside the record collection. The needle is up.';
+        ? `The turntable on its low shelf — a battered Technics direct-drive, the dust cover hazed and hairline-cracked. ${GameState.recordPlaying} is on the platter, spinning, the tonearm riding the groove.`
+        : 'The turntable on its low shelf: a battered Technics direct-drive, dust cover hazed and scratched, a hairline crack across one corner. The platter sits still, the felt mat shedding a little, the tonearm parked. With nothing on it the needle would just hiss against the run-out groove.';
     },
   },
   sofa: {
     names: ['sofa', 'couch', 'old sofa', 'old couch'],
     desc() {
+      const onSofa = GameState.catPos === 'sofa' || GameState.catPos === 'awake';
+      const catSeated = onSofa
+        ? (GameState.catPos === 'awake' ? 'Cracker is loafed at the far end, awake, watching you.' : 'Cracker is curled warm against your leg, slow-breathing.')
+        : 'The far cushion holds a warm dent where Cracker was.';
+      const catStanding = onSofa
+        ? (GameState.catPos === 'awake' ? 'Cracker sits loafed on one end, awake.' : 'Cracker is curled up asleep on one end.')
+        : (GameState.catPos === 'windowsill' ? 'Cracker has decamped to the kitchen windowsill.' : 'Cracker has wandered off to the kitchen.');
       if (GameState.seated) {
-        if (GameState.vhsPlaying && GameState.tvOn) return `You're sitting on it right now, watching ${GameState.vhsPlaying}. Cracker is curled up against your leg.`;
+        if (GameState.vhsPlaying && GameState.tvOn) return `You're sitting on it right now, watching ${GameState.vhsPlaying}. ${catSeated}`;
         return GameState.tvOn
-          ? "You're sitting on it right now, watching Hogan's Heroes. Cracker is curled up against your leg."
-          : "You're sitting on it right now. The TV is dark. Cracker is curled up against your leg.";
+          ? `You're sitting on it right now, watching Hogan's Heroes. ${catSeated}`
+          : `You're sitting on it right now. The TV is dark. ${catSeated}`;
       }
-      return 'A beat-up sofa with a quilt thrown over the back, facing the TV on the west wall. Cracker is curled up on one end.';
+      return `A beat-up brown three-seater, the corduroy worn shiny on the arms, one cushion gone soft in the middle. A patchwork quilt is thrown over the back. It faces the TV on the west wall. ${catStanding}`;
     },
   },
   cat: {
     names: ['cat', 'cracker', 'kitten', 'kitty'],
     desc() {
-      if (GameState.seated) return 'Cracker (aka Crack Baby) — beige, medium-length hair, deeply asleep. She\'s pressed against your leg, slow-breathing. One paw is tucked under her chin.';
-      return 'Cracker is curled up on the sofa, fast asleep. She doesn\'t stir.';
+      const base = 'Cracker (aka Crack Baby) — beige, medium-length hair, a faint tabby ghost-stripe down her sides, one ear nicked at the tip.';
+      if (GameState.catPos === 'windowsill') return `${base} Right now she's up on the kitchen windowsill, nose nearly to the glass, tail wrapped around her feet, riveted by something out in the rain.`;
+      if (GameState.catPos === 'bowl')       return `${base} At the moment she's in the kitchen, head down in her food bowl, eating with total focus.`;
+      if (GameState.catPos === 'awake')      return `${base} She's loafed on the end of the sofa, paws tucked under, awake and watching the room with mild, lordly interest.`;
+      if (GameState.seated)                  return `${base} She's pressed warm against your leg, deeply asleep, one paw tucked under her chin, breathing slow.`;
+      return `${base} She's curled in a tight comma on one end of the sofa, fast asleep, and doesn't stir.`;
     },
   },
   cabinet: {
@@ -531,17 +548,21 @@ export const SCENERY = {
       else if (GameState.coffeePotState === 'water' || GameState.coffeePotState === 'filter' || GameState.coffeePotState === 'grounds')
                                              coffeeBlurb = 'a coffee maker on the counter — halfway through a fresh pot';
       else                                   coffeeBlurb = 'a coffee maker on the counter, carafe still half full';
-      return `A small, open kitchen along the east wall. ${coffeeBlurb[0].toUpperCase() + coffeeBlurb.slice(1)}. `
-           + 'A cabinet above it. A refrigerator humming against the wall. '
-           + 'A gas range in the southeast corner' + (GameState.stoveOn ? ' — one burner lit' : '') + '. A small window above it' + (GameState.windowOpen ? ', cracked open' : ', closed') + '. A few dishes in the sink.';
+      const catHere = GameState.catPos === 'bowl'       ? ' Cracker is head-down in her food bowl by the fridge.'
+                    : GameState.catPos === 'windowsill' ? ' Cracker is up on the windowsill over the stove, watching the rain.'
+                    : '';
+      return `A small, open kitchen along the east wall, worn linoleum underfoot. ${coffeeBlurb[0].toUpperCase() + coffeeBlurb.slice(1)}. `
+           + 'A cabinet above it, a dish rack beside the sink. A refrigerator humming against the wall, a Jade Palace menu and a few photos under magnets. '
+           + 'A gas range in the southeast corner' + (GameState.stoveOn ? ' — one burner lit' : '') + '. A small window above it' + (GameState.windowOpen ? ', cracked open' : ', closed') + '. A few dishes in the sink.' + catHere;
     },
   },
   window: {
     names: ['window', 'windows', 'outside'],
     desc() {
+      const sill = GameState.catPos === 'windowsill' ? ' Cracker is up on the sill, watching the rain run down.' : '';
       return GameState.windowOpen
-        ? 'A small window in the southeast corner of the kitchen, cracked open an inch or two. Warm, damp air drifts in through the gap.'
-        : 'A small window in the southeast corner of the kitchen. Closed. The rain hammers against the glass outside.';
+        ? `A small single-pane window over the stove, southeast corner — the frame swollen with age, the sash propped a couple of inches on a paint-stiff stick. Damp air drifts in. Out past it, the backs of the next street's row houses stand in the rain.${sill}`
+        : `A small single-pane window over the stove, painted shut at the edges, closed now. The glass rattles faintly when a bus passes out front. Rain runs down it in long seams; beyond, the wet backs of the row houses blur.${sill}`;
     },
   },
   quilt: {
@@ -621,7 +642,7 @@ export const SCENERY = {
   },
   poster: {
     names: ['poster', 'show poster', 'concert poster'],
-    desc: 'A faded concert poster near the door. Hard to make out the band now.',
+    desc: 'A faded silkscreen gig poster by the door — the Khyber, a bill of bands whose names have gone to pale ghosts in the ink. You were there. You think you were there. The bottom corner is torn where the tape finally gave out.',
   },
   door: {
     names: ['door', 'front door'],

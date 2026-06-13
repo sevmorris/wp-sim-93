@@ -1,4 +1,6 @@
 import { SystemState } from './state.js';
+import { CONFIG } from './config.js';
+import { FS } from './filesystem.js';
 
 export const outputEl = document.getElementById('output');
 export const promptEl = document.getElementById('prompt');
