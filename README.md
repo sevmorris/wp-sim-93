@@ -6,7 +6,7 @@ Late morning. It's raining — one of those that keeps you inside. Nothing on th
 
 There's no score. No inventory puzzle to solve. No boss fight. Just a small living room and a kitchen, some records, a cat named Cracker, and whatever you feel like doing with your morning.
 
-**[Play it here](https://sevmorris.github.io/buckingham-sim-93/)**
+**[Play it here](https://sevmorris.github.io/wp-sim-93/)**
 
 ---
 
