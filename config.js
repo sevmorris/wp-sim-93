@@ -16,14 +16,25 @@ export const VERSION = '260727.01';
    a person typing. The letter on the CRT is deliberately not included: it
    arrives whole.
 
-   TELETYPE_CPS is a floor, not a fixed speed: a batch that would take longer
-   than TELETYPE_MAX_MS accelerates to land on that deadline, so long
-   descriptions stay brisk without a visible snap mid-paragraph.
+   The two constants are coupled, and getting that backwards undoes the point
+   of the rate. TELETYPE_CPS is a floor; TELETYPE_MAX_MS is a deadline a batch
+   accelerates to meet. So the cap only leaves the floor alone while
+
+       longest batch / TELETYPE_CPS  <  TELETYPE_MAX_MS
+
+   Lower the rate without raising the cap and the cap starts binding on exactly
+   the longest text — the room description and the intro — speeding those back
+   up while everything shorter slows down. 480 cps needs ~2.7s for the 1274
+   character intro, hence 2800.
+
+   480 sits near 8 characters per 60fps frame; measured, the curve runs 7-9
+   with a median of 8, since the budget is rounded up each frame. The cap now
+   binds above ~1340 characters, which nothing in the game currently reaches.
 
    TELETYPE_CPS = 0 disables the reveal entirely (instant output, the original
    behaviour). `prefers-reduced-motion: reduce` forces the same path.        */
-export const TELETYPE_CPS    = 700;  // characters/second floor; 0 = instant
-export const TELETYPE_MAX_MS = 1200; // hard deadline per command batch
+export const TELETYPE_CPS    = 480;  // characters/second floor; 0 = instant
+export const TELETYPE_MAX_MS = 2800; // hard deadline per command batch
 
 /* Solid block cursor riding the end of the revealing text. One element, moved
    from line to line, removed when the queue drains. Never blinks: a blink
