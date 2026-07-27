@@ -2586,9 +2586,26 @@ async function handleFloppyPass(val) {
 // Splitting the phrase is the whole fix: object on the left, surface on the
 // right. A leading preposition is allowed so the object can be elided
 // ("put on the record player" — the player means the record they're holding).
+// The surface is always at the end, and item titles are full of prepositions —
+// "In the Court of the Crimson King", "Adventures in the Screen Trade", "Notes
+// on Cinematography". Splitting at the first preposition tore those titles in
+// half. So walk the candidate split points right-to-left and take the first
+// whose right-hand side names scenery the game actually knows; failing that,
+// fall back to the rightmost split so an unknown surface still reports itself
+// as an unknown surface rather than as a missing object.
 function splitSurfacePhrase(rest) {
-  const m = rest.match(/^(.*?)\s*\b(?:on to|onto|into|on|in)\b\s+(.+)$/);
-  return m ? { obj: m[1].trim(), surface: m[2].trim() } : null;
+  const re = /\b(?:on to|onto|into|on|in)\b/g;
+  const points = [];
+  for (let m; (m = re.exec(rest)); ) points.push([m.index, m.index + m[0].length]);
+  let fallback = null;
+  for (let i = points.length - 1; i >= 0; i--) {
+    const obj     = rest.slice(0, points[i][0]).trim();
+    const surface = rest.slice(points[i][1]).trim();
+    if (!surface) continue;
+    fallback = fallback || { obj, surface };
+    if (findScenery(surface.replace(/^(the|a|an|my)\s+/, ''))) return { obj, surface };
+  }
+  return fallback;
 }
 
 // Routing only. Each surface hands off to the handler that already owns it, so
