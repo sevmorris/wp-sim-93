@@ -596,6 +596,41 @@ function findScenery(word) {
   return undefined;
 }
 
+// Ask the ContextManager which candidate is meant — it scores by recency in
+// ActionHistory, position in FocusStack, area proximity and verb fitness — and
+// only fall back to asking the player when they're genuinely tied. The generic
+// branches used to skip this entirely and print every match, which is how
+// "take record" answered with all 21 records on the shelf.
+function pickCandidate(verb, candidates, noun) {
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return candidates[0];
+  const chosen = ContextManager.disambiguate(verb, candidates.map(c => c.id));
+  if (chosen) return candidates.find(c => c.id === chosen);
+  // Nothing to go on. Listing is fine for a few; past that the list is the
+  // wall of text this machinery exists to avoid, and the shelf description
+  // already told them what's there.
+  if (candidates.length > 8) {
+    addLine(`Which ${noun}? There's a whole wall of them — name one.`);
+  } else {
+    addLine(`Which ${noun}?`);
+    for (const c of candidates) addLine(`  ${c.label}`);
+  }
+  return null;
+}
+
+// Completes a take once a candidate is settled. Something set down and picked
+// back up gets its own line — "off the shelf" would be a lie about a record
+// that's been sitting at your feet.
+function takeResolved(it, shelfLine) {
+  const wasDropped = it.dropped;
+  autoStand();
+  it.dropped = false;
+  GameState.gInventory.push(it.id);
+  ContextManager.setFocus(it.id, 'item');
+  addLine(wasDropped ? `You pick up ${it.label}.` : shelfLine);
+  if (it.takeNote) addLine(it.takeNote, 'dim');
+}
+
 function gameLook() {
   addLine('THE LIVING ROOM', 'hi');
   addLine('');
@@ -668,41 +703,43 @@ function gameTake(args) {
 
   // Generic "record"
   if (/^(record|a record|the record)$/.test(word)) {
-    if (!ensureArea('shelf')) return;
-    const available = ITEMS.filter(it => it.shelved && !GameState.gInventory.includes(it.id) && !it.dropped);
+    const available = ITEMS.filter(it => it.shelved && !GameState.gInventory.includes(it.id));
+    // A record you just set down is at your feet — don't send yourself back to
+    // the shelf to pick it up, and don't leave it out of the running.
+    if (!available.some(it => it.dropped) && !ensureArea('shelf')) return;
     if (!available.length) { addLine('There are no records left on the shelf.'); return; }
-    if (available.length === 1) { autoStand(); GameState.gInventory.push(available[0].id); ContextManager.setFocus(available[0].id, 'item'); addLine(`You take ${available[0].label} off the shelf.`); }
-    else { addLine('Which record?'); for (const r of available) addLine(`  ${r.label}`); }
+    const chosen = pickCandidate('take', available, 'record');
+    if (chosen) takeResolved(chosen, `You take ${chosen.label} off the shelf.`);
     return;
   }
 
   // Generic "cassette" / "tape"
   if (/^(cassette|tape|a cassette|a tape)$/.test(word)) {
-    if (!ensureArea('ne')) return;
-    const available = ITEMS.filter(it => it.shelvedTape && !GameState.gInventory.includes(it.id) && !it.dropped);
+    const available = ITEMS.filter(it => it.shelvedTape && !GameState.gInventory.includes(it.id));
+    if (!available.some(it => it.dropped) && !ensureArea('ne')) return;
     if (!available.length) { addLine('There are no cassettes on the shelf.'); return; }
-    if (available.length === 1) { autoStand(); GameState.gInventory.push(available[0].id); ContextManager.setFocus(available[0].id, 'item'); addLine(`You take ${available[0].label} from the rack.`); }
-    else { addLine('Which tape?'); for (const t of available) addLine(`  ${t.label}`); }
+    const chosen = pickCandidate('take', available, 'tape');
+    if (chosen) takeResolved(chosen, `You take ${chosen.label} from the rack.`);
     return;
   }
 
   // Generic "vhs" / "video tape"
   if (/^(vhs|video|vhs tape|a vhs|the vhs|video tape|a video|a video tape)$/.test(word)) {
-    if (!ensureArea('north')) return;
-    const available = ITEMS.filter(it => it.shelvedVHS && !GameState.gInventory.includes(it.id) && !it.dropped);
+    const available = ITEMS.filter(it => it.shelvedVHS && !GameState.gInventory.includes(it.id));
+    if (!available.some(it => it.dropped) && !ensureArea('north')) return;
     if (!available.length) { addLine('There are no VHS tapes on the shelf.'); return; }
-    if (available.length === 1) { autoStand(); GameState.gInventory.push(available[0].id); ContextManager.setFocus(available[0].id, 'item'); addLine(`You take ${available[0].label} off the shelf.`); }
-    else { addLine('Which tape?'); for (const v of available) addLine(`  ${v.label}`); }
+    const chosen = pickCandidate('take', available, 'tape');
+    if (chosen) takeResolved(chosen, `You take ${chosen.label} off the shelf.`);
     return;
   }
 
   // Generic "book"
   if (/^(book|a book|the book)$/.test(word)) {
-    if (!ensureArea('north')) return;
-    const available = ITEMS.filter(it => it.shelvedBook && !GameState.gInventory.includes(it.id) && !it.dropped);
+    const available = ITEMS.filter(it => it.shelvedBook && !GameState.gInventory.includes(it.id));
+    if (!available.some(it => it.dropped) && !ensureArea('north')) return;
     if (!available.length) { addLine('There are no books left on the shelf.'); return; }
-    if (available.length === 1) { autoStand(); GameState.gInventory.push(available[0].id); ContextManager.setFocus(available[0].id, 'item'); addLine(`You take ${available[0].label} off the shelf.`); }
-    else { addLine('Which book?'); for (const b of available) addLine(`  ${b.label}`); }
+    const chosen = pickCandidate('take', available, 'book');
+    if (chosen) takeResolved(chosen, `You take ${chosen.label} off the shelf.`);
     return;
   }
 
@@ -712,8 +749,8 @@ function gameTake(args) {
     if (!GameState.fridgeOpen) { addLine('The fridge is closed.'); return; }
     const available = ITEMS.filter(it => it.inFridge && it.drinkable && !GameState.gInventory.includes(it.id));
     if (!available.length) { addLine("There's no beer left."); return; }
-    if (available.length === 1) { autoStand(); available[0].inFridge = false; GameState.gInventory.push(available[0].id); ContextManager.setFocus(available[0].id, 'item'); addLine(`You grab ${available[0].label} from the fridge.`); }
-    else { addLine('Which one?'); for (const b of available) addLine(`  ${b.label}`); }
+    const chosen = pickCandidate('take', available, 'one');
+    if (chosen) { chosen.inFridge = false; takeResolved(chosen, `You grab ${chosen.label} from the fridge.`); }
     return;
   }
 
@@ -838,32 +875,22 @@ function gameDrop(args, surface) {
   // Strip trailing filler words ("put record back", "put it down", "put away")
   let raw = args.join(' ').replace(/\s+(back|away|down|there|here)$/, '').trim();
 
-  // Resolve generic category words to a specific held item
-  if (/^(book|a book|the book)$/.test(raw)) {
-    const held = ITEMS.filter(it => it.shelvedBook && GameState.gInventory.includes(it.id));
-    if (!held.length) { addLine("You're not carrying a book."); return; }
-    if (held.length > 1) { addLine('Which book?'); for (const b of held) addLine(`  ${b.label}`); return; }
-    raw = held[0].id;
-  } else if (/^(record|a record|the record)$/.test(raw)) {
-    const held = ITEMS.filter(it => it.shelved && GameState.gInventory.includes(it.id));
-    if (!held.length) { addLine("You're not carrying a record."); return; }
-    if (held.length > 1) { addLine('Which record?'); for (const r of held) addLine(`  ${r.label}`); return; }
-    raw = held[0].id;
-  } else if (/^(cassette|tape|a cassette|a tape)$/.test(raw)) {
-    const held = ITEMS.filter(it => it.shelvedTape && GameState.gInventory.includes(it.id));
-    if (!held.length) { addLine("You're not carrying a cassette."); return; }
-    if (held.length > 1) { addLine('Which tape?'); for (const t of held) addLine(`  ${t.label}`); return; }
-    raw = held[0].id;
-  } else if (/^(vhs|video|vhs tape|a vhs|a video)$/.test(raw)) {
-    const held = ITEMS.filter(it => it.shelvedVHS && GameState.gInventory.includes(it.id));
-    if (!held.length) { addLine("You're not carrying a VHS tape."); return; }
-    if (held.length > 1) { addLine('Which tape?'); for (const v of held) addLine(`  ${v.label}`); return; }
-    raw = held[0].id;
-  } else if (/^(beer|a beer|the beer)$/.test(raw)) {
-    const held = ITEMS.filter(it => it.drinkable && GameState.gInventory.includes(it.id));
-    if (!held.length) { addLine("You're not carrying a beer."); return; }
-    if (held.length > 1) { addLine('Which one?'); for (const b of held) addLine(`  ${b.label}`); return; }
-    raw = held[0].id;
+  // Resolve generic category words to a specific held item, letting the
+  // context layer choose when more than one qualifies.
+  const dropCategory = [
+    [/^(book|a book|the book)$/,                    'shelvedBook', 'book', "You're not carrying a book."],
+    [/^(record|a record|the record)$/,              'shelved',     'record', "You're not carrying a record."],
+    [/^(cassette|tape|a cassette|a tape)$/,         'shelvedTape', 'tape', "You're not carrying a cassette."],
+    [/^(vhs|video|vhs tape|a vhs|a video)$/,        'shelvedVHS',  'tape', "You're not carrying a VHS tape."],
+    [/^(beer|a beer|the beer)$/,                    'drinkable',   'one',  "You're not carrying a beer."],
+  ].find(([re]) => re.test(raw));
+  if (dropCategory) {
+    const [, flag, noun, empty] = dropCategory;
+    const held = ITEMS.filter(it => it[flag] && GameState.gInventory.includes(it.id));
+    if (!held.length) { addLine(empty); return; }
+    const chosen = pickCandidate('drop', held, noun);
+    if (!chosen) return;
+    raw = chosen.id;
   }
 
   const it = ITEMS.find(i => GameState.gInventory.includes(i.id) && (i.id === raw || i.label.toLowerCase().includes(raw)))
