@@ -58,6 +58,17 @@
     }
     .line.dim   { color: var(--amber-lo); }
     .line.hi    { color: var(--amber-hi); }
+
+    /* Rides the end of the text being revealed. Deliberately does not blink —
+       against 700 characters a second of motion a blink reads as flicker. */
+    .tt-cursor {
+      display: inline-block;
+      width: 0.6em;
+      height: 1em;
+      margin-left: 1px;
+      vertical-align: text-bottom;
+      background: currentColor;
+    }
     .line.err   { color: #cc4400; }
     .line.white { color: #ffffff; }
 

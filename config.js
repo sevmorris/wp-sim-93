@@ -9,7 +9,7 @@ export const CONFIG = {
   HOME:      '/home/joe',
 };
 
-export const VERSION = '260726.06';
+export const VERSION = '260726.10';
 
 /* ── Teletype reveal ────────────────────────────────────────────────────────
    Output reveals character by character, like a serial terminal rather than a
@@ -19,8 +19,18 @@ export const VERSION = '260726.06';
 
    TELETYPE_CPS = 0 disables the reveal entirely (instant output, the original
    behaviour). `prefers-reduced-motion: reduce` forces the same path.        */
-export const TELETYPE_CPS    = 0;    // characters/second floor; 0 = instant
+export const TELETYPE_CPS    = 700;  // characters/second floor; 0 = instant
 export const TELETYPE_MAX_MS = 1200; // hard deadline per command batch
+
+/* The letter is the one place a reveal is thematically earned — a disk being
+   read, not a room being described — so it gets its own much slower rate and
+   no deadline. Skippable by keypress like everything else.                  */
+export const TELETYPE_LETTER_CPS = 120;
+
+/* Solid block cursor riding the end of the revealing text. One element, moved
+   from line to line, removed when the queue drains. Never blinks: a blink
+   competing with 700 cps of motion reads as flicker.                        */
+export const TELETYPE_CURSOR = true;
 
 export const MOTD = `
 SunOS Release 4.1.3 (owl)  #1: Fri Sep 10 09:22:47 EDT 1993

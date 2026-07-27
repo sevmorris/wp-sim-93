@@ -1,7 +1,7 @@
-import { CONFIG, MOTD, VERSION } from './config.js';
+import { CONFIG, MOTD, VERSION, TELETYPE_LETTER_CPS } from './config.js';
 import { FS } from './filesystem.js';
 import { SystemState, GameState, ContextManager } from './state.js';
-import { addLine, clearOutput, cap, normPath, resolvePath, children, decryptLetter, outputEl, promptEl, inputEl, panelEl } from './utils.js';
+import { addLine, clearOutput, cap, normPath, resolvePath, children, decryptLetter, revealText, drainReveal, outputEl, promptEl, inputEl, panelEl } from './utils.js';
 import { ROOM_DESC, ITEMS, WATCH_DESC, LISTEN_DESC, READ_DESC, SCENERY } from './world.js';
 
 const AREA_NAMES = {
@@ -3208,7 +3208,10 @@ const crtBarEl     = document.getElementById('crt-bar');
 
 function showCRTLetter(content) {
   crtBarEl.textContent  = 'A:\\LETTER  TXT     2048  10-03-93  11:48p';
-  crtBodyEl.textContent = content;
+  // The letter is the one reveal the fiction actually asks for — a disk being
+  // read off a drive. Its own path and rate; the decrypt has already happened
+  // by the time we get here, so nothing upstream of this is touched.
+  revealText(crtBodyEl, content, TELETYPE_LETTER_CPS);
   crtOverlayEl.style.display = 'flex';
   // Two rAF frames to let display:flex apply before opacity transitions
   requestAnimationFrame(() => requestAnimationFrame(() => crtOverlayEl.classList.add('visible')));
@@ -3230,13 +3233,19 @@ function hideCRTLetter() {
   }, 300);
 }
 
+// While the letter is still arriving, the first dismissal finishes it rather
+// than throwing it away — otherwise a reader who touches anything loses the
+// thing they came for. A second one closes the overlay as before.
 crtOverlayEl.addEventListener('click', () => {
-  if (crtOverlayEl.classList.contains('visible')) hideCRTLetter();
+  if (!crtOverlayEl.classList.contains('visible')) return;
+  if (drainReveal()) return;
+  hideCRTLetter();
 });
 
 document.addEventListener('keydown', (e) => {
   if (crtOverlayEl.classList.contains('visible')) {
     e.preventDefault();
+    if (drainReveal()) return;
     hideCRTLetter();
   }
 });

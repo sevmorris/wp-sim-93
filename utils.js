@@ -1,5 +1,5 @@
 import { SystemState } from './state.js';
-import { CONFIG, TELETYPE_CPS, TELETYPE_MAX_MS } from './config.js';
+import { CONFIG, TELETYPE_CPS, TELETYPE_MAX_MS, TELETYPE_CURSOR } from './config.js';
 import { FS } from './filesystem.js';
 
 export const outputEl = document.getElementById('output');
@@ -38,7 +38,50 @@ function settleIdle() {
   for (const resolve of waiting) resolve();
 }
 
-function endBatch() { started = 0; revealed = 0; settleIdle(); }
+// ── Block cursor ──────────────────────────────────────────────────────────
+// One element for the whole session, moved to whichever line is revealing and
+// pulled out when there's nothing left. Recreating it per line would restart
+// any transition and leave orphans behind on a drain.
+let cursorEl = null;
+function cursor() {
+  if (!cursorEl) {
+    cursorEl = document.createElement('span');
+    cursorEl.className = 'tt-cursor';
+    cursorEl.setAttribute('aria-hidden', 'true');
+  }
+  return cursorEl;
+}
+function moveCursorTo(span) { if (TELETYPE_CURSOR) span.appendChild(cursor()); }
+function retireCursor()     { if (cursorEl && cursorEl.parentNode) cursorEl.remove(); }
+
+// ── Screen-reader announcements ───────────────────────────────────────────
+// #output is not a live region and never becomes one: growing a text node
+// inside one re-announces the whole region on every mutation, which a
+// character-by-character reveal would do hundreds of times a second. Instead a
+// hidden polite region receives each batch's complete text once, at enqueue
+// time, so assistive tech reads the finished response immediately while the
+// visible reveal plays out at its own pace.
+let announcerEl = null;
+function announcer() {
+  if (!announcerEl) {
+    announcerEl = document.createElement('div');
+    announcerEl.setAttribute('aria-live', 'polite');
+    announcerEl.setAttribute('aria-atomic', 'true');
+    announcerEl.style.cssText =
+      'position:absolute;width:1px;height:1px;margin:-1px;padding:0;' +
+      'overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;';
+    document.body.appendChild(announcerEl);
+  }
+  return announcerEl;
+}
+let announceBuf = [];
+function announceBatch() {
+  if (!announceBuf.length) return;
+  announcer().textContent = announceBuf.join('\n');
+  announceBuf = [];
+}
+
+function endBatch() { started = 0; revealed = 0; retireCursor(); settleIdle(); }
 
 function frame(now) {
   rafId = null;
@@ -62,12 +105,16 @@ function frame(now) {
     due       -= take;
     if (head.from >= head.text.length) queue.shift();
   }
+  if (queue.length) moveCursorTo(queue[0].span);
   if (pinned) outputEl.scrollTop = outputEl.scrollHeight;
   if (queue.length) rafId = requestAnimationFrame(frame);
   else endBatch();
 }
 
-// Reveal everything still pending, right now.
+// Reveal everything still pending in the terminal, right now. Deliberately
+// leaves the letter alone: the CRT overlay owns that reveal, because there a
+// keypress has to mean "finish it" before it can mean "close it", and draining
+// from here would consume the press the overlay needs to tell those apart.
 export function drainOutput() {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
   for (const q of queue) q.span.textContent = q.text;
@@ -81,8 +128,45 @@ export function drainOutput() {
 function cancelQueue() {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
   queue.length = 0;
+  announceBuf = [];
   endBatch();
 }
+
+// ── Standalone reveal ─────────────────────────────────────────────────────
+// For text that isn't a line of terminal output — the letter on the CRT, which
+// writes into its own element and wants a much slower rate and no deadline.
+let reveal = null;   // { el, text, from, cps, started, rafId }
+
+export function revealText(el, text, cps) {
+  drainReveal();
+  if (!cps || reducedMotion()) { el.textContent = text; return; }
+  reveal = { el, text: String(text), from: 0, cps, started: 0, rafId: null };
+  el.textContent = '';
+  reveal.rafId = requestAnimationFrame(revealFrame);
+}
+
+function revealFrame(now) {
+  if (!reveal) return;
+  reveal.rafId = null;
+  if (!reveal.started) reveal.started = now;
+  const due = Math.min(
+    Math.ceil(((now - reveal.started) / 1000) * reveal.cps),
+    reveal.text.length);
+  reveal.el.textContent = reveal.text.slice(0, due);
+  reveal.from = due;
+  if (due >= reveal.text.length) { reveal = null; return; }
+  reveal.rafId = requestAnimationFrame(revealFrame);
+}
+
+export function drainReveal() {
+  if (!reveal) return false;
+  if (reveal.rafId) cancelAnimationFrame(reveal.rafId);
+  reveal.el.textContent = reveal.text;
+  reveal = null;
+  return true;                      // told the caller there was something to finish
+}
+
+export function revealPending() { return !!reveal; }
 
 // Resolves once nothing is left to reveal. Test hook: lets a driver await the
 // real completion signal instead of guessing at a timeout.
@@ -107,6 +191,11 @@ export function addLine(text = '', cls = '') {
   span.textContent = '';
   outputEl.appendChild(span);
   queue.push({ span, text: String(text), from: 0 });
+  // Hand the finished text to assistive tech now, once per batch, rather than
+  // letting it watch the reveal. queueMicrotask fires after the command has
+  // finished enqueueing, so the whole response announces as one utterance.
+  if (!announceBuf.length) queueMicrotask(announceBatch);
+  if (text) announceBuf.push(String(text));
   if (!rafId) rafId = requestAnimationFrame(frame);
   return span;
 }
@@ -140,6 +229,10 @@ if (typeof window !== 'undefined') {
     idle:    outputIdle,
     drain:   drainOutput,
     pending: () => queue.reduce((n, q) => n + (q.text.length - q.from), 0),
+    // Test seams: drive the loop with synthetic timestamps to measure the
+    // reveal curve without depending on a visible tab firing frames.
+    _frame:  (t) => frame(t),
+    _state:  () => ({ queued: queue.length, revealed, budget, started, letter: !!reveal }),
   };
 }
 
