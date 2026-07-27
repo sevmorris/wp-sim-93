@@ -826,10 +826,13 @@ function gameTake(args) {
   if (it.takeNote) addLine(it.takeNote, 'dim');
 }
 
-function gameDrop(args) {
+// `surface`, when given, names where the thing was set down — supplied by the
+// preposition rule so "put the mug on the desk" says so instead of "You set
+// down the mug." Bespoke lines below (the needle skipping, the VCR) win over it.
+function gameDrop(args, surface) {
   if (!args.length) {
     const best = ContextManager.resolveIt('drop') || GameState.lastItem;
-    if (best && GameState.gInventory.includes(best)) { gameDrop([best]); return; }
+    if (best && GameState.gInventory.includes(best)) { gameDrop([best], surface); return; }
     GameState.pendingVerb = 'drop'; addLine('Drop what?'); return;
   }
   // Strip trailing filler words ("put record back", "put it down", "put away")
@@ -894,7 +897,7 @@ function gameDrop(args) {
     return;
   }
   ContextManager.setFocus(it.id, 'item');
-  addLine(`You set down ${it.label}.`);
+  addLine(surface ? `You set ${it.label} on the ${surface}.` : `You set down ${it.label}.`);
 }
 
 function gameRead(args) {
@@ -2531,6 +2534,47 @@ async function handleFloppyPass(val) {
 }
 
 
+// ── Preposition-aware surfaces (S3) ────────────────────────────────────────
+// "put X on the record player" used to fall through to gameDrop, which looked
+// for an item labelled "marquee moon on record player", found nothing, and
+// reported "You're not carrying that." about a record in the player's hand.
+// Splitting the phrase is the whole fix: object on the left, surface on the
+// right. A leading preposition is allowed so the object can be elided
+// ("put on the record player" — the player means the record they're holding).
+function splitSurfacePhrase(rest) {
+  const m = rest.match(/^(.*?)\s*\b(?:on to|onto|into|on|in)\b\s+(.+)$/);
+  return m ? { obj: m[1].trim(), surface: m[2].trim() } : null;
+}
+
+// Routing only. Each surface hands off to the handler that already owns it, so
+// every line the player reads is still the hand-written one for that device.
+function gamePutOn(objWord, surfaceWord) {
+  const objRaw = (objWord || '').replace(/^(the|a|an|my|some)\s+/i, '').trim();
+  const obj    = /^(it|that|this|one)$/i.test(objRaw)
+    ? (ContextManager.resolveIt('put') || '')
+    : objRaw;
+  const words  = obj ? obj.split(/\s+/) : [];
+  // Strip the article before resolving: "the record player" would otherwise
+  // miss findScenery's exact pass and fall to the partial one, where the bare
+  // word "record" matches the shelf before the turntable gets a look in.
+  const surf   = surfaceWord.toLowerCase().replace(/^(the|a|an|my)\s+/, '').trim();
+  const sc     = findScenery(surf);
+  const name   = sc ? sc.names[0] : surf;
+
+  if (/turntable|record player/.test(name))  { gamePlay(words); return; }
+  if (/vcr/.test(name))                      { words.length ? gamePlay(words) : gameInsertVHS();      return; }
+  if (/boombox/.test(name))                  { words.length ? gamePlay(words) : gameInsertCassette(); return; }
+  if (/drive|slot|computer|^pc$/.test(name)) { gameInsertFloppy(); return; }
+  if (/coffee|basket|maker|pot/.test(name))  { /grounds?/.test(obj) ? gameAddGrounds() : gameAddFilter(); return; }
+  if (/pan|skillet|stove/.test(name))        { gamePutInPan(words); return; }
+  if (/trash|garbage/.test(name))            { gameThrowAway(words); return; }
+
+  // An ordinary surface: set the thing down, and say where it went.
+  if (!sc) { addLine("You don't see that here."); return; }
+  if (!words.length) { GameState.pendingVerb = 'put'; addLine('Put what?'); return; }
+  gameDrop(words, name);
+}
+
 const VERB_REGISTRY = [
   // ── Multi-word pattern dispatch ──────────────────────────────────────────
   { test: (cmd, args, rest) => cmd === 'look'  && args[0] === 'at', exec: (cmd, args, rest) => { gameExamine(args.slice(1)); } },
@@ -2840,6 +2884,15 @@ const VERB_REGISTRY = [
   { test: (cmd) => ['look', 'l', 'describe'].includes(cmd), exec: (cmd, args, rest) => { gameLook(); } },
   { test: (cmd) => ['examine', 'x', 'inspect', 'check'].includes(cmd), exec: (cmd, args, rest) => { gameExamine(args); } },
   { test: (cmd) => ['take', 'get', 'grab', 'pick', 'snag'].includes(cmd), exec: (cmd, args, rest) => { gameTake(args); } },
+  // The needle, first — these are the phrasings a turntable invites and none of
+  // them name a record, so the surface split below would read "needle" as the
+  // object. "drop the needle on the record" means play, not drop.
+  { test: (cmd, args, rest) => ['drop', 'put', 'place', 'set', 'lower', 'cue'].includes(cmd) && /\b(needle|tonearm)\b/.test(rest),
+    exec: () => { gamePutOn('', 'turntable'); } },
+  // One rule for every "<thing> on|in <surface>" phrasing that isn't already
+  // claimed by a more specific pattern above.
+  { test: (cmd, args, rest) => ['put', 'place', 'set', 'drop', 'stick', 'slide'].includes(cmd) && !!splitSurfacePhrase(rest),
+    exec: (cmd, args, rest) => { const p = splitSurfacePhrase(rest); gamePutOn(p.obj, p.surface); } },
   { test: (cmd) => ['drop', 'put', 'place', 'set'].includes(cmd), exec: (cmd, args, rest) => { gameDrop(args); } },
   { test: (cmd) => ['leave'].includes(cmd), exec: (cmd, args, rest) => { gameGo(['outside']); } },
   { test: (cmd) => ['read'].includes(cmd), exec: (cmd, args, rest) => { gameRead(args); } },
