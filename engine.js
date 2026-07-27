@@ -511,18 +511,22 @@ function itemAccessible(it) {
 // actually reach. A bare `label.includes(word)` handed "can" to Psychocandy and
 // "box" to the matches shut in the kitchen drawer, so the game would refuse,
 // confidently and wrongly, on behalf of an object the player never meant.
+// How squarely a query names an item: 0 exact, 1 whole word, 2 loose substring,
+// -1 no match. The tier matters beyond ordering — a loose substring hit is weak
+// enough that visible scenery should outrank it (see resolveTarget).
+function itemNameTier(it, w) {
+  const lab = it.label.toLowerCase();
+  if (it.id === w || lab === w) return 0;
+  if (new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(lab)) return 1;
+  if (lab.includes(w)) return 2;
+  return -1;
+}
+
 function gameItem(word) {
   const w = word.toLowerCase().trim();
   if (!w) return undefined;
-  const lab   = it => it.label.toLowerCase();
-  const whole = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
-  const tiers = [
-    it => it.id === w || lab(it) === w,
-    it => whole.test(lab(it)),
-    it => lab(it).includes(w),
-  ];
-  for (const match of tiers) {
-    const hits = ITEMS.filter(match);
+  for (const tier of [0, 1, 2]) {
+    const hits = ITEMS.filter(it => itemNameTier(it, w) === tier);
     if (!hits.length) continue;
     // Prefer reachable and not-yet-held, so duplicate-label items (the three
     // unlabeled tapes) each stay individually takeable.
@@ -531,6 +535,24 @@ function gameItem(word) {
         || hits[0];
   }
   return undefined;
+}
+
+// Shared resolution for the verbs that inspect rather than manipulate.
+// Scenery and items live in separate tables and each verb decided for itself
+// which to consult, so `examine menu` found the menu on the fridge while
+// `read menu` insisted it wasn't there. Order: an item the player can reach and
+// has named squarely, then scenery, then any item at all — so something visible
+// in the room outranks an object shut in a drawer that merely shares a word,
+// while a genuinely inaccessible item still resolves and reports its container.
+// Returns { kind: 'item' | 'scenery', obj } or null.
+function resolveTarget(word) {
+  const w  = word.toLowerCase().trim();
+  const it = gameItem(w);
+  if (it && itemAccessible(it) && itemNameTier(it, w) <= 1) return { kind: 'item', obj: it };
+  const sc = findScenery(w);
+  if (sc) return { kind: 'scenery', obj: sc };
+  if (it) return { kind: 'item', obj: it };
+  return null;
 }
 
 function findScenery(word) {
@@ -897,8 +919,35 @@ function gameRead(args) {
     return;
   }
 
-  const it = gameItem(word);
-  if (!it || it.hidden) { addLine("You don't see that here."); return; }
+  // Generic category words resolve to what's in hand — the same inference the
+  // no-argument path above makes, so "read book" works while holding one.
+  const category = { book: 'shelvedBook', record: 'shelved', cassette: 'shelvedTape',
+                     tape: 'shelvedTape', vhs: 'shelvedVHS', video: 'shelvedVHS' };
+  const catFlag = category[word.replace(/^(a|an|the)\s+/, '')];
+  if (catFlag) {
+    const held = ITEMS.filter(i => i[catFlag] && GameState.gInventory.includes(i.id));
+    if (held.length === 1) { gameRead([held[0].id]); return; }
+  }
+
+  const target = resolveTarget(word);
+  if (!target) { addLine("You don't see that here."); return; }
+
+  // Scenery: read what's actually written on it, if anything is.
+  if (target.kind === 'scenery') {
+    const sc      = target.obj;
+    const scArea  = ContextManager.areaOf(sc.names[0]);
+    if (scArea && GameState.playerArea !== scArea) {
+      addLine(`You'll need to head over to the ${AREA_NAMES[scArea] || scArea} to read that.`);
+      return;
+    }
+    ContextManager.setFocus(sc.names[0], 'scenery', sceneChildren(sc));
+    if (sc.readDesc) addLine(typeof sc.readDesc === 'function' ? sc.readDesc() : sc.readDesc);
+    else             addLine(`There's nothing to read on the ${sc.names[0]}.`);
+    return;
+  }
+
+  const it = target.obj;
+  if (it.hidden) { addLine("You don't see that here."); return; }
   const reach = ContextManager.canInteract(it.id);
   if (reach !== true) {
     addLine(`You'll need to head over to the ${AREA_NAMES[reach] || reach} to read that.`);
