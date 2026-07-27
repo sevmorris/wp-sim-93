@@ -9,7 +9,18 @@ export const CONFIG = {
   HOME:      '/home/joe',
 };
 
-export const VERSION = '260726.04';
+export const VERSION = '260726.06';
+
+/* ── Teletype reveal ────────────────────────────────────────────────────────
+   Output reveals character by character, like a serial terminal rather than a
+   person typing. TELETYPE_CPS is a floor, not a fixed speed: a batch that
+   would take longer than TELETYPE_MAX_MS accelerates to land on that deadline,
+   so long descriptions stay brisk without a visible snap mid-paragraph.
+
+   TELETYPE_CPS = 0 disables the reveal entirely (instant output, the original
+   behaviour). `prefers-reduced-motion: reduce` forces the same path.        */
+export const TELETYPE_CPS    = 0;    // characters/second floor; 0 = instant
+export const TELETYPE_MAX_MS = 1200; // hard deadline per command batch
 
 export const MOTD = `
 SunOS Release 4.1.3 (owl)  #1: Fri Sep 10 09:22:47 EDT 1993
