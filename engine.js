@@ -615,6 +615,11 @@ function pickCandidate(verb, candidates, noun) {
   if (candidates.length === 1) return candidates[0];
   const chosen = ContextManager.disambiguate(verb, candidates.map(c => c.id));
   if (chosen) return candidates.find(c => c.id === chosen);
+  // Identical labels offer no choice worth making. The three unlabeled tapes
+  // are interchangeable, and asking would print the same line three times.
+  // Checked after disambiguate, so context still decides which one when it has
+  // an opinion — the tape at your feet differs from the two on the shelf.
+  if (new Set(candidates.map(c => c.label)).size === 1) return candidates[0];
   // Nothing to go on. Listing is fine for a few; past that the list is the
   // wall of text this machinery exists to avoid, and the shelf description
   // already told them what's there.
