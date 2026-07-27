@@ -9,7 +9,7 @@ export const CONFIG = {
   HOME:      '/home/joe',
 };
 
-export const VERSION = '260726.02';
+export const VERSION = '260726.03';
 
 export const MOTD = `
 SunOS Release 4.1.3 (owl)  #1: Fri Sep 10 09:22:47 EDT 1993
