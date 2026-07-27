@@ -522,19 +522,28 @@ function itemNameTier(it, w) {
   return -1;
 }
 
-function gameItem(word) {
+// Every item tied at the best matching tier — the set a verb may legitimately
+// have to choose between. With the kitchen drawer open, "box" matches both the
+// filter box and the box of matches, at the same tier, both reachable: no
+// amount of ordering can pick between them, so the caller asks the
+// ContextManager instead of guessing.
+function gameItemCandidates(word) {
   const w = word.toLowerCase().trim();
-  if (!w) return undefined;
+  if (!w) return [];
   for (const tier of [0, 1, 2]) {
     const hits = ITEMS.filter(it => itemNameTier(it, w) === tier);
     if (!hits.length) continue;
-    // Prefer reachable and not-yet-held, so duplicate-label items (the three
-    // unlabeled tapes) each stay individually takeable.
-    return hits.find(it => itemAccessible(it) && !GameState.gInventory.includes(it.id))
-        || hits.find(it => itemAccessible(it))
-        || hits[0];
+    const reachable = hits.filter(itemAccessible);
+    return reachable.length ? reachable : hits;
   }
-  return undefined;
+  return [];
+}
+
+function gameItem(word) {
+  const hits = gameItemCandidates(word);
+  // Prefer not-yet-held, so duplicate-label items (the three unlabeled tapes)
+  // each stay individually takeable.
+  return hits.find(it => !GameState.gInventory.includes(it.id)) || hits[0];
 }
 
 // Shared resolution for the verbs that inspect rather than manipulate.
@@ -821,7 +830,16 @@ function gameTake(args) {
     addLine("The scrapple is in the pan.");
     return;
   }
-  const it = gameItem(word);
+  // Several items can tie at the same match tier — "box" with the kitchen
+  // drawer open means either the filter box or the matches. Let the context
+  // layer choose; it asks only when there's honestly nothing to go on.
+  const tied = gameItemCandidates(word).filter(c => !GameState.gInventory.includes(c.id));
+  let it = gameItem(word);
+  if (tied.length > 1) {
+    const chosen = pickCandidate('take', tied, 'one');
+    if (!chosen) return;
+    it = chosen;
+  }
   if (it && it.inTrash) { addLine(`You threw that away. Try: take ${it.label} from trash`); return; }
   if (!it || it.hidden)           { addLine("You don't see that here.");      return; }
   if (GameState.gInventory.includes(it.id)) { addLine("You're already carrying that."); return; }
