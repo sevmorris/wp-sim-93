@@ -1207,9 +1207,17 @@ function gamePlay(args) {
   // Generic play shorthands — find what's in hand
   let it = gameItem(word);
 
-  // For generic terms, prefer whatever the player is actually holding
-  if (it && !GameState.gInventory.includes(it.id) && /^(tape|cassette|record|vhs|video|movie|film)$/.test(word)) {
-    const inHand = ITEMS.find(i => (i.shelved || i.shelvedTape || i.shelvedVHS) && GameState.gInventory.includes(i.id));
+  // Prefer whatever the player is actually holding — playing is about the copy
+  // in your hand. Generic terms match anything playable; a named one has to
+  // match by name, so "play Abbey Road" while holding Horses still means Abbey
+  // Road. Without the name case the three identically-labelled unlabeled tapes
+  // resolve to a shelved twin, and the game tells you to go pick up the tape
+  // you are already holding.
+  if (it && !GameState.gInventory.includes(it.id)) {
+    const generic = /^(tape|cassette|record|vhs|video|movie|film)$/.test(word);
+    const inHand  = ITEMS.find(i => (i.shelved || i.shelvedTape || i.shelvedVHS)
+      && GameState.gInventory.includes(i.id)
+      && (generic || itemNameTier(i, word) >= 0));
     if (inHand) it = inHand;
   }
 
