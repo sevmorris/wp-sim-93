@@ -493,11 +493,44 @@ function startAdventure() {
   inputEl.value = '';
 }
 
+// True when the player could actually get at the item right now. Used to
+// prefer a candidate in plain sight over one shut in a drawer that happens to
+// share a word with it. Held items always count — you can reach what you carry.
+function itemAccessible(it) {
+  if (GameState.gInventory.includes(it.id)) return true;
+  if (it.hidden)                                          return false;
+  if (it.inCabinet       && !GameState.cabinetOpen)       return false;
+  if (it.inFridge        && !GameState.fridgeOpen)        return false;
+  if (it.inDrawer        && !GameState.drawerOpen)        return false;
+  if (it.inKitchenDrawer && !GameState.kitchenDrawerOpen) return false;
+  return true;
+}
+
+// Resolve a noun to an item in tiers — exact id/label, then whole-word match,
+// then loose substring — preferring, within each tier, something the player can
+// actually reach. A bare `label.includes(word)` handed "can" to Psychocandy and
+// "box" to the matches shut in the kitchen drawer, so the game would refuse,
+// confidently and wrongly, on behalf of an object the player never meant.
 function gameItem(word) {
   const w = word.toLowerCase().trim();
-  // Prefer items not already in inventory so duplicate-label items (e.g. unlabeled tapes) are reachable
-  return ITEMS.find(it => (it.id === w || it.label.toLowerCase().includes(w)) && !GameState.gInventory.includes(it.id))
-      || ITEMS.find(it =>  it.id === w || it.label.toLowerCase().includes(w));
+  if (!w) return undefined;
+  const lab   = it => it.label.toLowerCase();
+  const whole = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+  const tiers = [
+    it => it.id === w || lab(it) === w,
+    it => whole.test(lab(it)),
+    it => lab(it).includes(w),
+  ];
+  for (const match of tiers) {
+    const hits = ITEMS.filter(match);
+    if (!hits.length) continue;
+    // Prefer reachable and not-yet-held, so duplicate-label items (the three
+    // unlabeled tapes) each stay individually takeable.
+    return hits.find(it => itemAccessible(it) && !GameState.gInventory.includes(it.id))
+        || hits.find(it => itemAccessible(it))
+        || hits[0];
+  }
+  return undefined;
 }
 
 function findScenery(word) {
@@ -2425,8 +2458,8 @@ const VERB_REGISTRY = [
   { test: (cmd, args, rest) => cmd === 'look'  && (args[0] === 'in' || args[0] === 'inside' || args[0] === 'into'), exec: (cmd, args, rest) => { gameExamine(args.slice(1)); } },
   { test: (cmd, args, rest) => cmd === 'where' && /^am\b/.test(rest), exec: (cmd, args, rest) => { handleGameCommand('where'); } },
   { test: (cmd, args, rest) => cmd === 'pick'  && args[0] === 'up', exec: (cmd, args, rest) => { gameTake(args.slice(1)); } },
-  { test: (cmd, args, rest) => (cmd === 'take' || cmd === 'get' || cmd === 'grab' || cmd === 'dig') && /\b(from|out of|out)\b.*\b(trash|garbage|bin|can|waste)/i.test(rest), exec: (cmd, args, rest) => {
-    const rawWord = rest.replace(/\s*(from|out of|out)\s*(the\s+)?(trash|garbage|bin|can|waste\s*basket).*/i, '').trim();
+  { test: (cmd, args, rest) => (cmd === 'take' || cmd === 'get' || cmd === 'grab' || cmd === 'dig') && /\b(from|out of|out|in)\b.*\b(trash|garbage|bin|can|waste)/i.test(rest), exec: (cmd, args, rest) => {
+    const rawWord = rest.replace(/\s*(from|out of|out|in)\s*(the\s+)?(trash|garbage|bin|can|waste\s*basket).*/i, '').trim();
     const itemWord = rawWord.replace(/^(the|a|an)\s+/i, '').trim();
     const it = itemWord ? ITEMS.find(i => i.inTrash && (i.id === itemWord || i.label.toLowerCase().includes(itemWord))) : null;
     if (!it) {
