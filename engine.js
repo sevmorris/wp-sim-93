@@ -1713,6 +1713,7 @@ function gameGo(args) {
     return;
   }
   if (/^(west|tv|television)$/.test(dest)) {
+    GameState.playerArea = 'sofa';
     addLine('You walk over to the TV.');
     addLine('');
     addLine(typeof SCENERY.tv.desc === 'function' ? SCENERY.tv.desc() : SCENERY.tv.desc);
@@ -1781,12 +1782,15 @@ function gameGo(args) {
   // Try to match any known scenery object as a destination
   const sc = findScenery(dest);
   if (sc) {
-    const kitchenThings = /fridge|refrigerator|stove|range|burner|cabinet|coffee|sink|counter|kitchen drawer/;
-    const deskThings    = /desk|chair|computer|pc|monitor|printer/;
-    if (kitchenThings.test(dest))                          GameState.playerArea = 'kitchen';
-    else if (deskThings.test(dest))                        GameState.playerArea = 'desk';
-    else if (sc === SCENERY.cassetteShelf || sc === SCENERY.boombox) GameState.playerArea = 'ne';
-    const prefix = kitchenThings.test(dest) ? 'You step into the kitchen.' : 'You walk over.';
+    // Move to wherever the scenery actually lives, rather than matching the
+    // destination against a hardcoded list of three areas. Without this the
+    // walk was narrated but never happened, so the next verb would tell you to
+    // go somewhere you'd just been told you'd arrived at. Scenery with no home
+    // area (ceiling, walls, window) is ambient — you don't have to cross the
+    // room to look at it, so playerArea is left alone.
+    const area = ContextManager.areaOf(sc.names[0]);
+    if (area) GameState.playerArea = area;
+    const prefix = area === 'kitchen' ? 'You step into the kitchen.' : 'You walk over.';
     addLine(prefix);
     addLine('');
     addLine(typeof sc.desc === 'function' ? sc.desc() : sc.desc);

@@ -166,7 +166,7 @@ export const ContextManager = (() => {
               'matches', 'rubber bands', 'takeout menus'],
   };
   const AREA_SCENERY = {
-    desk:    ['desk', 'drawer', 'pc', 'computer', 'monitor', 'printer'],
+    desk:    ['desk', 'chair', 'drawer', 'pc', 'computer', 'monitor', 'printer'],
     kitchen: ['fridge', 'refrigerator', 'stove', 'counter', 'cabinet',
               'sink', 'coffee maker', 'coffee pot', 'kitchen drawer', 'pan', 'skillet'],
     shelf:   ['record shelf', 'shelf', 'turntable'],
