@@ -555,8 +555,20 @@ function resolveTarget(word) {
   return null;
 }
 
-function findScenery(word) {
-  const w      = word.toLowerCase().trim();
+// Singular/plural variants of a query, so the game answers to its own plurals.
+// ROOM_DESC says "bookshelves" while the scenery is named "bookshelf", and -ves
+// is irregular enough that plain s/es stripping never reaches it.
+function morphVariants(w) {
+  const out = [];
+  if (/ves$/.test(w))  out.push(w.replace(/ves$/, 'f'), w.replace(/ves$/, 'fe'));
+  if (/ies$/.test(w))  out.push(w.replace(/ies$/, 'y'));
+  if (/es$/.test(w))   out.push(w.slice(0, -2));
+  if (/s$/.test(w))    out.push(w.slice(0, -1));
+  else                 out.push(w + 's', w + 'es');
+  return out;
+}
+
+function matchScenery(w) {
   const wWords = w.split(/\s+/);
   // Pass 1: exact name match — prevents multi-word input from matching a shorter name first
   const exact = Object.values(SCENERY).find(s => s.names.includes(w));
@@ -570,6 +582,18 @@ function findScenery(word) {
       return w.includes(n) || n.includes(w);                         // multi-word phrase overlap
     return false;
   }));
+}
+
+function findScenery(word) {
+  const w = word.toLowerCase().trim();
+  // Exact and partial passes first, so morphology can never outrank a real name.
+  const hit = matchScenery(w);
+  if (hit) return hit;
+  for (const v of morphVariants(w)) {
+    const m = matchScenery(v);
+    if (m) return m;
+  }
+  return undefined;
 }
 
 function gameLook() {

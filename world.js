@@ -338,7 +338,7 @@ export const SCENERY = {
     },
   },
   computer: {
-    names: ['computer', 'pc', 'windows', 'monitor', 'screen', 'keyboard', 'dos'],
+    names: ['computer', 'pc', 'windows 3.1', 'program manager', 'monitor', 'screen', 'keyboard', 'dos'],
     desc() {
       const driveStatus = GameState.floppyInserted
         ? 'The floppy drive light is on. A disk is loaded.'
