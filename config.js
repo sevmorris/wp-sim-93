@@ -9,27 +9,25 @@ export const CONFIG = {
   HOME:      '/home/joe',
 };
 
-export const VERSION = '260726.10';
+export const VERSION = '260727.01';
 
 /* ── Teletype reveal ────────────────────────────────────────────────────────
-   Output reveals character by character, like a serial terminal rather than a
-   person typing. TELETYPE_CPS is a floor, not a fixed speed: a batch that
-   would take longer than TELETYPE_MAX_MS accelerates to land on that deadline,
-   so long descriptions stay brisk without a visible snap mid-paragraph.
+   Game text reveals character by character, like a serial terminal rather than
+   a person typing. The letter on the CRT is deliberately not included: it
+   arrives whole.
+
+   TELETYPE_CPS is a floor, not a fixed speed: a batch that would take longer
+   than TELETYPE_MAX_MS accelerates to land on that deadline, so long
+   descriptions stay brisk without a visible snap mid-paragraph.
 
    TELETYPE_CPS = 0 disables the reveal entirely (instant output, the original
    behaviour). `prefers-reduced-motion: reduce` forces the same path.        */
 export const TELETYPE_CPS    = 700;  // characters/second floor; 0 = instant
 export const TELETYPE_MAX_MS = 1200; // hard deadline per command batch
 
-/* The letter is the one place a reveal is thematically earned — a disk being
-   read, not a room being described — so it gets its own much slower rate and
-   no deadline. Skippable by keypress like everything else.                  */
-export const TELETYPE_LETTER_CPS = 120;
-
 /* Solid block cursor riding the end of the revealing text. One element, moved
    from line to line, removed when the queue drains. Never blinks: a blink
-   competing with 700 cps of motion reads as flicker.                        */
+   competing with the reveal reads as flicker.                               */
 export const TELETYPE_CURSOR = true;
 
 export const MOTD = `

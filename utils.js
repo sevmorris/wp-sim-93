@@ -132,42 +132,6 @@ function cancelQueue() {
   endBatch();
 }
 
-// ── Standalone reveal ─────────────────────────────────────────────────────
-// For text that isn't a line of terminal output — the letter on the CRT, which
-// writes into its own element and wants a much slower rate and no deadline.
-let reveal = null;   // { el, text, from, cps, started, rafId }
-
-export function revealText(el, text, cps) {
-  drainReveal();
-  if (!cps || reducedMotion()) { el.textContent = text; return; }
-  reveal = { el, text: String(text), from: 0, cps, started: 0, rafId: null };
-  el.textContent = '';
-  reveal.rafId = requestAnimationFrame(revealFrame);
-}
-
-function revealFrame(now) {
-  if (!reveal) return;
-  reveal.rafId = null;
-  if (!reveal.started) reveal.started = now;
-  const due = Math.min(
-    Math.ceil(((now - reveal.started) / 1000) * reveal.cps),
-    reveal.text.length);
-  reveal.el.textContent = reveal.text.slice(0, due);
-  reveal.from = due;
-  if (due >= reveal.text.length) { reveal = null; return; }
-  reveal.rafId = requestAnimationFrame(revealFrame);
-}
-
-export function drainReveal() {
-  if (!reveal) return false;
-  if (reveal.rafId) cancelAnimationFrame(reveal.rafId);
-  reveal.el.textContent = reveal.text;
-  reveal = null;
-  return true;                      // told the caller there was something to finish
-}
-
-export function revealPending() { return !!reveal; }
-
 // Resolves once nothing is left to reveal. Test hook: lets a driver await the
 // real completion signal instead of guessing at a timeout.
 export function outputIdle() {
