@@ -2,168 +2,389 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Floppy Letter — Encrypt</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FL2601 — Cipher Tool</title>
   <style>
-    body     { font-family: monospace; background: #111; color: #ccc; padding: 2rem; max-width: 700px; }
-    h1       { color: #fff; font-size: 1.1rem; margin-bottom: 1.5rem; }
-    label    { display: block; color: #aaa; margin-bottom: 0.3rem; }
-    input, textarea { width: 100%; background: #222; border: 1px solid #444; color: #fff;
-                      font-family: monospace; font-size: 0.95rem; padding: 0.5rem;
-                      box-sizing: border-box; margin-bottom: 1.2rem; }
-    textarea { height: 400px; resize: both; min-height: 150px; }
-    .buttons { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-    button   { background: #33ff33; color: #000; border: none; padding: 0.5rem 1.2rem;
-               font-family: monospace; font-size: 1rem; cursor: pointer; }
-    button:hover  { background: #55ff55; }
-    button:disabled { background: #1a6b1a; color: #333; cursor: default; }
-    #result  { margin-top: 1.5rem; }
-    #cipher  { background: #1a1a1a; border: 1px solid #444; color: #33ff33;
-               font-family: monospace; font-size: 0.8rem; padding: 0.8rem;
-               word-break: break-all; white-space: pre-wrap; display: none; }
-    .status  { margin-top: 0.8rem; font-size: 0.9rem; }
-    .ok      { color: #33ff33; }
-    .error   { color: #ff4444; }
-    .note    { color: #666; font-size: 0.85rem; margin-top: 0.5rem; }
+    :root {
+      --green: #33ff33;
+      --green-hi: #99ff99;
+      --green-lo: #1a6b1a;
+      --bg: #0a0a0a;
+      --panel-bg: #111;
+      --border: #222;
+      --text: #ccc;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', Courier, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 800px;
+      width: 100%;
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      padding: 2rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    h1 {
+      color: var(--green);
+      font-size: 1.2rem;
+      margin-bottom: 2rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      border-bottom: 1px solid var(--green-lo);
+      padding-bottom: 0.5rem;
+    }
+
+    .field {
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      color: var(--green-lo);
+      font-size: 0.8rem;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+    }
+
+    input[type="password"],
+    input[type="text"],
+    textarea {
+      width: 100%;
+      background: #000;
+      border: 1px solid var(--border);
+      color: var(--green-hi);
+      padding: 0.75rem;
+      font-family: inherit;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, textarea:focus {
+      border-color: var(--green-lo);
+    }
+
+    textarea {
+      height: 200px;
+      resize: vertical;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+
+    button {
+      background: var(--green-lo);
+      color: #000;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      font-family: inherit;
+      font-weight: bold;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--green);
+      box-shadow: 0 0 10px var(--green-lo);
+    }
+
+    button:disabled {
+      background: #222;
+      color: #444;
+      cursor: not-allowed;
+    }
+
+    button.secondary {
+      background: transparent;
+      border: 1px solid var(--green-lo);
+      color: var(--green-lo);
+    }
+
+    button.secondary:hover:not(:disabled) {
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    #output-area {
+      margin-top: 2rem;
+      display: none;
+    }
+
+    .output-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    #result-text {
+      background: #050505;
+      border: 1px solid var(--green-lo);
+      color: var(--green);
+      padding: 1rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-size: 0.9rem;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .status {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      min-height: 1.2em;
+    }
+
+    .status.error { color: #ff4444; }
+    .status.ok { color: var(--green); }
+
+    .instructions {
+      margin-top: 3rem;
+      font-size: 0.8rem;
+      color: #666;
+      line-height: 1.5;
+    }
+
+    .instructions code {
+      color: #999;
+      background: #1a1a1a;
+      padding: 0 4px;
+    }
+
+    .tab-nav {
+      display: flex;
+      gap: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .tab {
+      cursor: pointer;
+      padding-bottom: 0.25rem;
+      border-bottom: 2px solid transparent;
+      color: #555;
+    }
+
+    .tab.active {
+      color: var(--green);
+      border-bottom-color: var(--green);
+    }
+
   </style>
 </head>
 <body>
-  <h1>Floppy Letter 2601 — Encrypt Tool</h1>
 
-  <label for="pass">Password</label>
-  <input type="password" id="pass" placeholder="Enter the floppy password">
+  <div class="container">
+    <h1>FL2601 — Cipher Tool</h1>
 
-  <label for="letter">Letter text</label>
-  <textarea id="letter" placeholder="Dear Joe,&#10;&#10;Your letter here..."></textarea>
+    <div class="field">
+      <label for="pass">Access Password</label>
+      <input type="password" id="pass" placeholder="Enter password...">
+    </div>
 
-  <div class="buttons">
-    <button id="btn-encrypt" onclick="encryptOnly()">Encrypt</button>
-    <button id="btn-save"    onclick="encryptAndSave()" disabled>Save to index.html</button>
-  </div>
+    <div class="tab-nav">
+      <div class="tab active" onclick="setMode('encrypt')">Encrypt</div>
+      <div class="tab" onclick="setMode('decrypt')">Decrypt</div>
+    </div>
 
-  <div id="result">
-    <div id="cipher"></div>
-    <p class="note" id="note" style="display:none">
-      Cipher ready. Click <strong>Save to index.html</strong> to write it directly,
-      or copy and paste into <code>CONFIG.FLOPPY_CIPHER</code> manually.
-    </p>
-    <p class="status" id="status"></p>
+    <div class="field">
+      <label id="input-label" for="input-text">Plaintext Letter</label>
+      <textarea id="input-text" placeholder="Type or paste text here..."></textarea>
+    </div>
+
+    <div class="buttons">
+      <button id="btn-action" onclick="process()">Encrypt Text</button>
+      <button class="secondary" onclick="clearAll()">Clear</button>
+    </div>
+
+    <div id="output-area">
+      <div class="output-header">
+        <label>Result</label>
+        <button class="secondary" style="padding: 0.25rem 0.75rem; font-size: 0.7rem;" onclick="copyResult()">Copy to Clipboard</button>
+      </div>
+      <div id="result-text"></div>
+      
+      <div class="buttons" style="margin-top: 1.5rem;">
+        <button id="btn-patch" class="secondary" onclick="patchFile()">Apply to Project File...</button>
+      </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="instructions">
+      <p>This tool uses PBKDF2 for key derivation (100,000 iterations, SHA-256) and AES-256-GCM for encryption.</p>
+      <p>The <strong>Apply to Project File</strong> feature can update <code>config.js</code> or <code>index.html</code> by searching for <code>FLOPPY_CIPHER: '...'</code>.</p>
+    </div>
   </div>
 
   <script>
-  let lastCipher = null;
+    let mode = 'encrypt';
+    let lastResult = '';
 
-  async function buildCipher() {
-    const pass   = document.getElementById('pass').value;
-    const letter = document.getElementById('letter').value;
-    const errEl  = document.getElementById('status');
+    function setMode(m) {
+      mode = m;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      
+      document.getElementById('input-label').textContent = mode === 'encrypt' ? 'Plaintext Letter' : 'Ciphertext (Base64)';
+      document.getElementById('btn-action').textContent = mode === 'encrypt' ? 'Encrypt Text' : 'Decrypt Text';
+      document.getElementById('input-text').placeholder = mode === 'encrypt' ? 'Type or paste text here...' : 'Paste base64 ciphertext here...';
+      
+      // Hide output when switching modes to avoid confusion
+      document.getElementById('output-area').style.display = 'none';
+      setStatus('');
+    }
 
-    errEl.className   = 'status';
-    errEl.textContent = '';
-
-    if (!pass)   { errEl.className = 'status error'; errEl.textContent = 'Enter a password.';  return null; }
-    if (!letter) { errEl.className = 'status error'; errEl.textContent = 'Enter letter text.'; return null; }
-
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const iv   = crypto.getRandomValues(new Uint8Array(12));
-
-    const keyMaterial = await crypto.subtle.importKey(
-      'raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']
-    );
-    const key = await crypto.subtle.deriveKey(
-      { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
-      keyMaterial,
-      { name: 'AES-GCM', length: 256 },
-      false,
-      ['encrypt']
-    );
-
-    const ct   = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(letter));
-    const blob = new Uint8Array(16 + 12 + ct.byteLength);
-    blob.set(salt, 0);
-    blob.set(iv,   16);
-    blob.set(new Uint8Array(ct), 28);
-
-    return btoa(String.fromCharCode(...blob));
-  }
-
-  async function encryptOnly() {
-    const cipherEl = document.getElementById('cipher');
-    const noteEl   = document.getElementById('note');
-    const saveBtn  = document.getElementById('btn-save');
-
-    cipherEl.style.display = 'none';
-    noteEl.style.display   = 'none';
-    saveBtn.disabled       = true;
-    lastCipher             = null;
-
-    try {
-      const b64 = await buildCipher();
-      if (!b64) return;
-      lastCipher             = b64;
-      cipherEl.textContent   = b64;
-      cipherEl.style.display = 'block';
-      noteEl.style.display   = 'block';
-      saveBtn.disabled       = false;
-    } catch (e) {
+    function setStatus(msg, type = '') {
       const s = document.getElementById('status');
-      s.className = 'status error';
-      s.textContent = 'Encryption failed: ' + e.message;
+      s.textContent = msg;
+      s.className = 'status ' + type;
     }
-  }
 
-  async function encryptAndSave() {
-    const statusEl = document.getElementById('status');
-    statusEl.className   = 'status';
-    statusEl.textContent = '';
+    function clearAll() {
+      document.getElementById('pass').value = '';
+      document.getElementById('input-text').value = '';
+      document.getElementById('output-area').style.display = 'none';
+      setStatus('');
+      lastResult = '';
+    }
 
-    // Re-encrypt fresh if needed
-    if (!lastCipher) {
-      try { lastCipher = await buildCipher(); } catch (e) {
-        statusEl.className = 'status error';
-        statusEl.textContent = 'Encryption failed: ' + e.message;
-        return;
+    async function process() {
+      const pass = document.getElementById('pass').value;
+      const text = document.getElementById('input-text').value;
+      
+      if (!pass) return setStatus('Password required.', 'error');
+      if (!text) return setStatus('Input text required.', 'error');
+
+      setStatus('Processing...');
+      
+      try {
+        if (mode === 'encrypt') {
+          lastResult = await encrypt(text, pass);
+        } else {
+          lastResult = await decrypt(text, pass);
+        }
+        
+        document.getElementById('result-text').textContent = lastResult;
+        document.getElementById('output-area').style.display = 'block';
+        setStatus(mode === 'encrypt' ? 'Encryption successful.' : 'Decryption successful.', 'ok');
+      } catch (e) {
+        setStatus(e.message, 'error');
+        document.getElementById('output-area').style.display = 'none';
       }
-      if (!lastCipher) return;
     }
 
-    // Pick index.html
-    let fileHandle;
-    try {
-      [fileHandle] = await window.showOpenFilePicker({
-        types: [{ description: 'HTML file', accept: { 'text/html': ['.html'] } }],
-        multiple: false,
-      });
-    } catch {
-      return; // user cancelled
-    }
+    async function encrypt(plaintext, password) {
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const iv   = crypto.getRandomValues(new Uint8Array(12));
 
-    // Read, patch, write
-    try {
-      const file = await fileHandle.getFile();
-      const text = await file.text();
-
-      const updated = text.replace(
-        /(FLOPPY_CIPHER:\s*')[^']*(')/,
-        `$1${lastCipher}$2`
+      const keyMaterial = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']
+      );
+      const key = await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt']
       );
 
-      if (updated === text) {
-        statusEl.className   = 'status error';
-        statusEl.textContent = "Couldn't find FLOPPY_CIPHER in that file. Are you sure it's index.html?";
-        return;
+      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext));
+      const blob = new Uint8Array(16 + 12 + ct.byteLength);
+      blob.set(salt, 0);
+      blob.set(iv,   16);
+      blob.set(new Uint8Array(ct), 28);
+
+      return btoa(String.fromCharCode(...blob));
+    }
+
+    async function decrypt(ciphertext, password) {
+      try {
+        const blob = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0));
+        const salt = blob.slice(0, 16);
+        const iv   = blob.slice(16, 28);
+        const ct   = blob.slice(28);
+
+        const keyMaterial = await crypto.subtle.importKey(
+          'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']
+        );
+        const key = await crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+          keyMaterial,
+          { name: 'AES-GCM', length: 256 },
+          false,
+          ['decrypt']
+        );
+
+        const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+        return new TextDecoder().decode(pt);
+      } catch (e) {
+        throw new Error('Decryption failed. Check password and ciphertext.');
+      }
+    }
+
+    function copyResult() {
+      navigator.clipboard.writeText(lastResult);
+      const btn = event.target;
+      const original = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = original, 2000);
+    }
+
+    async function patchFile() {
+      if (!lastResult || mode !== 'encrypt') {
+        return setStatus('Only encrypted output can be applied to project files.', 'error');
       }
 
-      const writable = await fileHandle.createWritable();
-      await writable.write(updated);
-      await writable.close();
+      let fileHandle;
+      try {
+        [fileHandle] = await window.showOpenFilePicker({
+          types: [{ description: 'Config/Source File', accept: { 'text/javascript': ['.js'], 'text/html': ['.html'] } }],
+          multiple: false,
+        });
+      } catch { return; }
 
-      statusEl.className   = 'status ok';
-      statusEl.textContent = `✓ Saved to ${fileHandle.name}`;
-    } catch (e) {
-      statusEl.className   = 'status error';
-      statusEl.textContent = 'Write failed: ' + e.message;
+      try {
+        const file = await fileHandle.getFile();
+        const text = await file.text();
+
+        // Match FLOPPY_CIPHER: '...' or FLOPPY_CIPHER = '...' or "..."
+        const updated = text.replace(
+          /(FLOPPY_CIPHER\s*[:=]\s*['"])[^'"]*(['"])/,
+          `$1${lastResult}$2`
+        );
+
+        if (updated === text) {
+          setStatus(`Couldn't find FLOPPY_CIPHER in ${fileHandle.name}.`, 'error');
+          return;
+        }
+
+        const writable = await fileHandle.createWritable();
+        await writable.write(updated);
+        await writable.close();
+
+        setStatus(`Successfully patched ${fileHandle.name}`, 'ok');
+      } catch (e) {
+        setStatus('Patch failed: ' + e.message, 'error');
+      }
     }
-  }
   </script>
 </body>
 </html>
