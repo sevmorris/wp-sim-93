@@ -3171,7 +3171,11 @@ function handleGameCommand(raw) {
   }
 
   addLine('');
-  promptEl.textContent = '> ';
+  // Don't stomp a prompt a handler has just changed. Reading the floppy sets
+  // 'Password: ' and switches the input to password mode; this line ran after
+  // it and put '> ' back, so the game asked for a password under the ordinary
+  // prompt. The mode was real either way — only the label was lying.
+  if (!GameState.awaitingFloppyPass) promptEl.textContent = '> ';
   inputEl.value = '';
 }
 
