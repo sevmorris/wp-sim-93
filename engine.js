@@ -2914,7 +2914,7 @@ const VERB_REGISTRY = [
   // ── Atmosphere & the morning ─────────────────────────────────────────────
   { test: (cmd, args, rest) => cmd === 'remember' || cmd === 'reminisce' || (cmd === 'think' && /seven|her|him|them|virginia|creek/.test(rest)), exec: () => { addLine(pick(REMEMBER_LINES)); } },
   { test: (cmd, args, rest) => cmd === 'think' && rest, exec: () => { addLine("You think about it — the rain, the day, the long flat stretch of hours ahead with nothing in them. It isn't a bad feeling. Your mind wanders off it after a while."); } },
-  { test: (cmd) => ['daydream', 'zone'].includes(cmd), exec: () => { addLine("You go somewhere for a while behind your own eyes. When you come back, the rain is exactly where you left it."); } },
+  { test: (cmd) => ['dream', 'daydream', 'zone'].includes(cmd), exec: () => { addLine("You go somewhere for a while behind your own eyes. When you come back, the rain is exactly where you left it."); } },
   { test: (cmd, args, rest) => ['curtains', 'blinds'].includes(cmd) || /curtain|blinds|drapes/.test(rest), exec: () => { addLine("No curtains, no blinds — just the window and the gray day leaning against it. You've been meaning to hang something. Not today."); } },
 
   // ── Frustration, handled gently ──────────────────────────────────────────
