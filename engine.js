@@ -2671,7 +2671,6 @@ const VERB_REGISTRY = [
     ContextManager.setFocus(it.id, 'item');
   } },
   { test: (cmd, args, rest) => cmd === 'put'   && args[0] === 'down', exec: (cmd, args, rest) => { gameDrop(args.slice(1)); } },
-  { test: (cmd, args, rest) => cmd === 'put'   && /on (the )?turntable/.test(rest), exec: (cmd, args, rest) => { gamePlay(rest.replace(/\s*on (the )?turntable/, '').trim().split(' ')); } },
   { test: (cmd, args, rest) => cmd === 'turn'  && args[0] === 'on'  && /coffee|maker|coffeemaker/.test(args.slice(1).join(' ')), exec: (cmd, args, rest) => { gameStartBrew(); } },
   { test: (cmd, args, rest) => cmd === 'turn'  && args[0] === 'off' && /coffee|maker|coffeemaker/.test(args.slice(1).join(' ')), exec: (cmd, args, rest) => { addLine(GameState.coffeePotState === 'brewing' ? "It's already going. Let it finish." : "The coffee maker is off."); } },
   { test: (cmd, args, rest) => cmd === 'turn'  && args[0] === 'on', exec: (cmd, args, rest) => { gameToggle(args.slice(1), true); } },
@@ -2699,12 +2698,13 @@ const VERB_REGISTRY = [
     else                                                                                                    gameInsertFloppy();
   } },
   { test: (cmd, args, rest) => cmd === 'insert' && /floppy|disk/.test(rest), exec: (cmd, args, rest) => { gameInsertFloppy(); } },
+  // "put floppy drive" names a destination with no preposition, so the surface
+  // rule has nothing to split on. Everything with one goes through that instead.
+  { test: (cmd, args, rest) => cmd === 'put' && /floppy|disk/.test(rest) && /computer|drive|slot/.test(rest) && !splitSurfacePhrase(rest), exec: () => { gameInsertFloppy(); } },
   { test: (cmd, args, rest) => cmd === 'eject'  && /floppy|disk/.test(rest), exec: (cmd, args, rest) => { gameEjectFloppy(); } },
   { test: (cmd, args, rest) => cmd === 'remove' && /floppy|disk/.test(rest), exec: (cmd, args, rest) => { gameEjectFloppy(); } },
   { test: (cmd, args, rest) => (cmd === 'eject' || cmd === 'remove') && /cassette|boombox/.test(rest), exec: (cmd, args, rest) => { gameEjectCassette(); } },
   { test: (cmd, args, rest) => (cmd === 'eject' || cmd === 'remove') && /vhs|vcr|video|movie|tape/.test(rest), exec: (cmd, args, rest) => { gameEjectVHS(); } },
-  { test: (cmd, args, rest) => cmd === 'put'    && /floppy|disk/.test(rest) && /computer|drive|slot/.test(rest), exec: (cmd, args, rest) => { gameInsertFloppy(); } },
-  { test: (cmd, args, rest) => cmd === 'put'    && /vhs|tape|video|movie/.test(rest) && /vcr|player/.test(rest), exec: (cmd, args, rest) => { gamePlay(rest.replace(/\s*(in(to)?|the)\s*(vcr|player)/g, '').trim().split(' ')); } },
   { test: (cmd, args, rest) => cmd === 'dir'    && /floppy|disk/.test(rest), exec: (cmd, args, rest) => { GameState.floppyInserted ? (addLine(''), addLine('A:\\'), addLine('  LETTER  TXT     2048  10-03-93  11:48p')) : addLine("There's no disk in the drive."); } },
   { test: (cmd, args, rest) => cmd === 'type'   && /letter|txt/.test(rest), exec: (cmd, args, rest) => { gameRead(['letter.txt']); } },
   { test: (cmd, args, rest) => cmd === 'listen' && args[0] === 'to', exec: (cmd, args, rest) => { gameListen(args.slice(1)); } },
@@ -2756,8 +2756,7 @@ const VERB_REGISTRY = [
   { test: (cmd, args, rest) => (cmd === 'pour' || cmd === 'dump' || cmd === 'empty' || cmd === 'discard') && /coffee|pot|carafe|old/.test(rest), exec: (cmd, args, rest) => { gamePourOutCoffee(); } },
   { test: (cmd, args, rest) => cmd === 'fill' && /carafe|pot|reservoir|maker|coffee maker/.test(rest), exec: (cmd, args, rest) => { gameFillCarafe(); } },
   { test: (cmd, args, rest) => cmd === 'fill' && /water/.test(rest) && /carafe|pot|reservoir/.test(rest), exec: (cmd, args, rest) => { gameFillCarafe(); } },
-  { test: (cmd, args, rest) => (cmd === 'add' || cmd === 'put' || cmd === 'place' || cmd === 'insert') && /filter/.test(rest) && /basket|maker|coffee|pot/.test(rest), exec: (cmd, args, rest) => { gameAddFilter(); } },
-  { test: (cmd, args, rest) => (cmd === 'add' || cmd === 'put' || cmd === 'place') && /filter/.test(rest) && !rest.includes('box'), exec: (cmd, args, rest) => { gameAddFilter(); } },
+  { test: (cmd, args, rest) => ['add', 'put', 'place', 'insert'].includes(cmd) && /filter/.test(rest) && !rest.includes('box'), exec: (cmd, args, rest) => { gameAddFilter(); } },
   { test: (cmd, args, rest) => (cmd === 'add' || cmd === 'put' || cmd === 'scoop' || cmd === 'measure') && /ground|coffee|grounds/.test(rest), exec: (cmd, args, rest) => { gameAddGrounds(); } },
   { test: (cmd, args, rest) => (cmd === 'start' || cmd === 'brew' || cmd === 'run' || cmd === 'switch') && /coffee|brew|maker|pot/.test(rest), exec: (cmd, args, rest) => { gameStartBrew(); } },
   { test: (cmd, args, rest) => cmd === 'flip' && /switch|maker|coffee/.test(rest), exec: (cmd, args, rest) => { gameStartBrew(); } },
@@ -2771,9 +2770,9 @@ const VERB_REGISTRY = [
     else                 addLine("The VCR is wired into channel 3. Turn on the VCR first.");
   } },
   // ── Scrapple / cooking ───────────────────────────────────────────────────
-  { test: (cmd, args, rest) => (cmd === 'put' || cmd === 'add' || cmd === 'place' || cmd === 'slice' || cmd === 'cut') && /scrapple/.test(rest) && /pan|stove|skillet/.test(rest), exec: (cmd, args, rest) => { gamePutInPan([]); } },
-  { test: (cmd, args, rest) => cmd === 'slice' && /scrapple/.test(rest), exec: (cmd, args, rest) => { gamePutInPan([]); } },
-  { test: (cmd, args, rest) => cmd === 'cut'   && /scrapple/.test(rest), exec: (cmd, args, rest) => { gamePutInPan([]); } },
+  // Verbs the surface rule can't reach: 'slice'/'cut' name no surface, and
+  // 'add ... to the pan' uses a preposition the splitter doesn't take.
+  { test: (cmd, args, rest) => ['slice', 'cut', 'add'].includes(cmd) && /scrapple/.test(rest), exec: () => { gamePutInPan([]); } },
   { test: (cmd, args, rest) => cmd === 'open'  && /kitchen drawer|knife drawer|drawer by|silverware|utensil/.test(rest), exec: (cmd, args, rest) => { gameOpen(['kitchen drawer']); } },
   { test: (cmd, args, rest) => cmd === 'close' && /kitchen drawer|knife drawer|drawer by|silverware|utensil/.test(rest), exec: (cmd, args, rest) => { gameClose(['kitchen drawer']); } },
   { test: (cmd, args, rest) => cmd === 'light' && /stove|burner|range|oven/.test(rest), exec: (cmd, args, rest) => { gameToggle(['stove'], true); } },
