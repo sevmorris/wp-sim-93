@@ -476,7 +476,10 @@ export const SCENERY = {
     openable: true,
   },
   jadePalace: {
-    names: ['jade palace', 'jade palace menu', 'chinese menu', 'takeout menu', 'menus', 'menu', 'fridge magnets', 'magnets', 'magnet', 'pineapple magnet', 'lo mein'],
+    // "takeout menu(s)" belongs to the drawer item that is literally labelled
+    // that; the menu on the fridge answers to "menu" and to its own name. They
+    // were both claiming both, which is how a visible menu lost to a hidden one.
+    names: ['jade palace', 'jade palace menu', 'chinese menu', 'fridge menu', 'menu', 'fridge magnets', 'magnets', 'magnet', 'pineapple magnet', 'lo mein'],
     desc: 'Jade Palace Chinese Restaurant. A folded paper menu held up by a magnet shaped like a pineapple. The lo mein is circled in pen.',
     readDesc: 'Wonton soup, egg foo young, the combination platters numbered into the twenties. A 215 number and a delivery radius that takes in your block by about half a street. The lo mein is circled in pen — your own handwriting, though you don\'t remember doing it. Either a recommendation or a warning.',
   },

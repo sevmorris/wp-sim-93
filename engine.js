@@ -3094,7 +3094,7 @@ const VERB_REGISTRY = [
 
   // ── Additional nonsense & classic IF commands ────────────────────────
   { test: (cmd) => ['jump', 'leap'].includes(cmd), exec: (cmd, args, rest) => { addLine('You jump on the spot. The floorboards creak.'); } },
-  { test: (cmd) => ['pray', 'pray'].includes(cmd), exec: (cmd, args, rest) => { addLine('If there is a god of this apartment, they are not listening.'); } },
+  { test: (cmd) => ['pray'].includes(cmd), exec: (cmd, args, rest) => { addLine('If there is a god of this apartment, they are not listening.'); } },
   { test: (cmd) => ['cry', 'weep', 'sob'].includes(cmd), exec: (cmd, args, rest) => { addLine('You shed a single tear for the state of your life. Then you move on.'); } },
   { test: (cmd) => ['laugh', 'chuckle', 'giggle'].includes(cmd), exec: (cmd, args, rest) => { addLine('You laugh out loud. It sounds a little unhinged in the empty room.'); } },
   { test: (cmd) => ['scream', 'shout', 'yell'].includes(cmd), exec: (cmd, args, rest) => { addLine('You scream into the void. The void asks you to keep it down.'); } },
@@ -3108,31 +3108,6 @@ const VERB_REGISTRY = [
   { test: (cmd) => ['burn'].includes(cmd), exec: (cmd, args, rest) => { addLine('You don\'t have a lighter, and arson is a crime.'); } },
   { test: (cmd) => ['smoke'].includes(cmd), exec: (cmd, args, rest) => { addLine('You quit years ago.'); } },
   { test: (cmd) => ['magic', 'cast', 'spell', 'abracadabra'].includes(cmd), exec: (cmd, args, rest) => { addLine('You wave your hands mysteriously. Nothing happens.'); } },
-  { test: (cmd) => ['inventory', 'i', 'inv', 'items', 'carrying'].includes(cmd), exec: (cmd, args, rest) => { gameInventory(); } },
-  { test: (cmd) => ['wait', 'z'].includes(cmd), exec: (cmd, args, rest) => {
-    addLine('Time passes.');
-    if (GameState.coffeePotState === 'brewing') checkBrew();
-  } },
-  { test: (cmd) => ['turn'].includes(cmd), exec: (cmd, args, rest) => { addLine('Turn what on or off?'); } },
-  { test: (cmd) => ['push', 'shove'].includes(cmd), exec: (cmd, args, rest) => { addLine("That doesn't budge."); } },
-  { test: (cmd) => ['pull'].includes(cmd), exec: (cmd, args, rest) => { addLine('You give it a tug. Nothing moves.'); } },
-  { test: (cmd) => ['relax', 'chill', 'rest', 'unwind'].includes(cmd), exec: (cmd, args, rest) => {
-    if (GameState.seated) {
-      addLine("You lean back into the cushions. The cat shifts slightly against your leg. For a moment, everything is perfectly fine.");
-      if (GameState.coffeePotState === 'brewing') checkBrew();
-    } else {
-      addLine("You can't really relax standing up. Maybe sit down first.");
-    }
-  } },
-  { test: (cmd) => ['sleep', 'nap'].includes(cmd), exec: (cmd, args, rest) => { addLine("You're not tired enough for that."); } },
-  { test: (cmd) => ['think'].includes(cmd), exec: (cmd, args, rest) => { addLine(pick(THINK_LINES)); } },
-  { test: (cmd) => ['dance'].includes(cmd), exec: (cmd, args, rest) => { addLine('You shuffle in place for a moment.'); } },
-  { test: (cmd) => ['sing'].includes(cmd), exec: (cmd, args, rest) => {
-    addLine(GameState.recordPlaying ? `You hum along with ${GameState.recordPlaying}.` : 'You hum to yourself.');
-  } },
-  { test: (cmd) => ['wave'].includes(cmd), exec: (cmd, args, rest) => { addLine('You wave at nobody in particular.'); } },
-  { test: (cmd) => ['score'].includes(cmd), exec: (cmd, args, rest) => { addLine('There is no score. Just the room.'); } },
-  { test: (cmd) => ['map'].includes(cmd), exec: (cmd, args, rest) => { gameMap(); } }
 ];
 
 function handleGameCommand(raw) {
@@ -3189,7 +3164,6 @@ function handleGameCommand(raw) {
     else                                                          addLine("That doesn't seem to do anything.", 'dim');
   }
 
-  // Nudge to eject once after reading, on the next non-eject command
   // Nudge to eject once after reading, on the next non-eject command
   if (GameState.floppyRead && GameState.floppyInserted && !GameState.ejectNudged && cmd !== 'eject') {
     GameState.ejectNudged = true;
