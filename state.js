@@ -51,6 +51,7 @@ export const GameState = {
   windowOpen: true,
   leaveAttempts: 0,
   dreamed: false,
+      momentSeen: false,
   gInventory: [],
   gHistory: [],
   gHistIdx: -1,
@@ -99,6 +100,7 @@ export const GameState = {
       windowOpen: true,
       leaveAttempts: 0,
       dreamed: false,
+      momentSeen: false,
       catPos: 'sofa',
       gInventory: [],
       gHistory: [],
@@ -117,6 +119,7 @@ export const GameState = {
       it.takeNote = it._origTakeNote;
       it._used = false;
       it.dropped = false;
+      it.inTrash = false;
     }
     ContextManager.focus.length = 0;
     ContextManager.history.length = 0;

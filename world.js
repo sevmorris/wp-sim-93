@@ -492,7 +492,7 @@ export const SCENERY = {
   // with a description of a refrigerator.
   // Named in the idle listen and feel pools but never an object until now.
   radiator: {
-    names: ['radiator', 'rad', 'heater', 'heat', 'pipes', 'steam heat'],
+    names: ['radiator', 'heater', 'heat', 'pipes', 'steam heat'],
     global: true,
     desc: 'A cast-iron radiator under the kitchen window, painted over so many times the fins have gone soft at the edges. It ticks when it feels like it.',
     listen: 'It knocks twice, deep in the pipe, and settles. A minute from now it will do it again for no reason you will ever learn.',
@@ -533,6 +533,10 @@ export const SCENERY = {
       if (GameState.scrappleInPan && !GameState.scrappleCooked) {
         addLine('You turn the knob. The burner ignites with a click and a soft whump.');
         addLine('The aroma of sage and cornmeal and pork fat fills the kitchen as the scrapple starts to sizzle.');
+        if (GameState.catPos !== 'bowl') {
+          GameState.catPos = 'bowl';
+          addLine('Cracker is in the kitchen before the second sizzle, sitting very upright, looking at the stove and then at you.', 'dim');
+        }
       } else {
         addLine('You turn the knob. The burner ignites — a low blue flame.');
       }
@@ -610,7 +614,9 @@ export const SCENERY = {
     desc() {
       const inIt = ITEMS.filter(i => i.inTrash);
       if (!inIt.length) return 'A small trash can under the counter. The bag is about half full.';
-      const what = inIt.map(i => i.label).join(', ');
+      const names = inIt.map(i => i.label);
+      const what = names.length === 1 ? names[0]
+                 : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
       return `A small trash can under the counter. The bag is about half full, and ${what} ${inIt.length > 1 ? 'sit' : 'sits'} right on top, not even buried.`;
     },
   },

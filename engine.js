@@ -1362,7 +1362,10 @@ function gamePlay(args) {
     addLine(pick(NEEDLE_DROPS), 'dim');
     const _snd = LISTEN_DESC[it.id];
     if (_snd) addLine(_snd, 'dim');
-    if (GameState.catPos === 'sofa') GameState.catPos = 'awake';
+    if (GameState.catPos === 'sofa') {
+      GameState.catPos = 'awake';
+      addLine('Cracker lifts her head at the first note, decides it is not a threat, and settles again with her eyes open.', 'dim');
+    }
     return;
   }
 
@@ -1850,13 +1853,17 @@ function gameSit(args) {
   if (where === 'chair') {
     addLine('You drop into the desk chair and scoot up to the monitor.');
   } else {
-    const back = GameState.catPos !== 'windowsill';
+    const wasHere = GameState.catPos === 'sofa' || GameState.catPos === 'awake';
+    const back    = GameState.catPos !== 'windowsill';
     if (back) GameState.catPos = 'sofa';
-    const catClause = back
-      ? 'Cracker shifts and presses warm against your leg.'
-      : "The cushion is still warm where Cracker was; she's over on the windowsill now, unbothered.";
+    const catClause = !back
+      ? "The cushion is still warm where Cracker was; she's over on the windowsill now, unbothered."
+      : wasHere
+        ? 'Cracker shifts and presses warm against your leg.'
+        : 'Cracker comes in from the kitchen at her own pace, considers the arrangement, and folds herself against your leg as though it were her idea.';
     if (GameState.vhsPlaying && GameState.tvOn) addLine(`You sink into the sofa. ${catClause} ${cap(GameState.vhsPlaying)} is on.`);
     else if (GameState.tvOn)          addLine(`You sink into the sofa. ${catClause} You watch Hogan's Heroes.`);
+    else if (GameState.recordPlaying) addLine(`You sink into the sofa. ${catClause} ${GameState.recordPlaying} keeps turning.`);
     else                    addLine(`You sink into the sofa. ${catClause} The room is quiet.`);
   }
 }
@@ -2159,7 +2166,7 @@ function gameListen(args) {
           :                                     "Slow, even breathing. She's deeply asleep.");
     return;
   }
-  if (/music|sound|noise|ambient|room/.test(target)) { gameListen([]); return; }
+  if (/^(the )?(music|sound|noise|ambient|room)$/.test(target)) { gameListen([]); return; }
   {
     const sc = findScenery(target);
     if (sc && sc.listen) { addLine(typeof sc.listen === 'function' ? sc.listen() : sc.listen); return; }
@@ -3202,6 +3209,18 @@ function handleGameCommand(raw) {
   if (GameState.floppyRead && GameState.floppyInserted && !GameState.ejectNudged && cmd !== 'eject') {
     GameState.ejectNudged = true;
     addLine('( the disk is still in the drive — eject floppy when you\'re ready )', 'dim');
+  }
+
+  // Coffee, the sofa, a record, and the rain — the four things this room is
+  // for, true at the same time. Fires once and never again; a beat that
+  // repeats stops being a beat and becomes furniture.
+  if (!GameState.momentSeen
+      && GameState.seated && GameState.playerArea === 'sofa'
+      && GameState.recordPlaying && GameState.windowOpen
+      && GameState.mugFilled && GameState.gInventory.includes('mug')) {
+    GameState.momentSeen = true;
+    addLine('');
+    addLine('Coffee in your hands, a record turning, rain at the window with all day to do it in. Nothing in the room needs anything from you. You notice that, and the noticing doesn\'t spoil it.', 'dim');
   }
 
   addLine('');
