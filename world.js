@@ -338,7 +338,7 @@ export const SCENERY = {
     },
   },
   computer: {
-    names: ['computer', 'pc', 'windows 3.1', 'program manager', 'monitor', 'screen', 'keyboard', 'dos'],
+    names: ['computer', 'pc', 'windows 3.1', 'program manager', 'monitor', 'screen', 'keyboard', 'dos', 'drive', 'drive slot', 'slot', 'prompt', 'dos prompt'],
     desc() {
       const driveStatus = GameState.floppyInserted
         ? 'The floppy drive light is on. A disk is loaded.'
@@ -401,7 +401,7 @@ export const SCENERY = {
     },
   },
   turntable: {
-    names: ['turntable', 'record player', 'player', 'needle', 'platter', 'tonearm'],
+    names: ['turntable', 'record player', 'player', 'needle', 'platter', 'tonearm', 'technics', 'felt mat', 'felt', 'cover', 'run-out groove', 'groove'],
     desc() {
       return GameState.recordPlaying
         ? `The turntable on its low shelf — a battered Technics direct-drive, the dust cover hazed and hairline-cracked. ${GameState.recordPlaying} is on the platter, spinning, the tonearm riding the groove.`
@@ -409,7 +409,7 @@ export const SCENERY = {
     },
   },
   sofa: {
-    names: ['sofa', 'couch', 'old sofa', 'old couch'],
+    names: ['sofa', 'couch', 'old sofa', 'old couch', 'cushion', 'arm', 'corduroy'],
     desc() {
       const onSofa = GameState.catPos === 'sofa' || GameState.catPos === 'awake';
       const catSeated = onSofa
@@ -428,7 +428,7 @@ export const SCENERY = {
     },
   },
   cat: {
-    names: ['cat', 'cracker', 'kitten', 'kitty'],
+    names: ['cat', 'cracker', 'kitten', 'kitty', 'tabby'],
     desc() {
       const base = 'Cracker (aka Crack Baby) — beige, medium-length hair, a faint tabby ghost-stripe down her sides, one ear nicked at the tip.';
       if (GameState.catPos === 'windowsill') return `${base} Right now she's up on the kitchen windowsill, nose nearly to the glass, tail wrapped around her feet, riveted by something out in the rain.`;
@@ -559,7 +559,7 @@ export const SCENERY = {
     },
   },
   window: {
-    names: ['window', 'windows', 'outside'],
+    names: ['window', 'windows', 'outside', 'windowsill', 'sill', 'sash', 'frame', 'window frame'],
     global: true,
     desc() {
       const sill = GameState.catPos === 'windowsill' ? ' Cracker is up on the sill, watching the rain run down.' : '';
@@ -598,7 +598,7 @@ export const SCENERY = {
     },
   },
   boombox: {
-    names: ['boombox', 'boom box', 'boom-box', 'stereo', 'tape player', 'cassette player', 'tape deck'],
+    names: ['boombox', 'boom box', 'boom-box', 'stereo', 'tape player', 'cassette player', 'tape deck', 'sony'],
     desc() {
       if (!GameState.boomBoxOn) return 'A Sony boombox in the northeast corner, on a shelf beside the cassettes. Power light off.';
       if (GameState.cassettePlaying) return `The boombox is on. ${GameState.cassettePlaying} is playing.`;
@@ -621,7 +621,7 @@ export const SCENERY = {
     },
   },
   vcr: {
-    names: ['vcr', 'vhs player', 'video player', 'video recorder', 'vcr player'],
+    names: ['vcr', 'vhs player', 'video player', 'video recorder', 'vcr player', 'clock'],
     desc() {
       if (!GameState.vcrOn && GameState.vhsPlayingId) return `A VCR stacked under the television. Power light off. ${cap(GameState.vhsPlaying)} is loaded.`;
       if (!GameState.vcrOn) return 'A VCR under the television. Power light off. The clock blinks 12:00.';
@@ -633,22 +633,22 @@ export const SCENERY = {
     turnOff() { if (!GameState.vcrOn) { addLine('The VCR is already off.'); return; } GameState.vcrOn = false; GameState.vhsPlaying = null; GameState.vhsPlayingId = null; addLine('You click the VCR off.'); },
   },
   floor: {
-    names: ['floor', 'ground', 'rug', 'area rug', 'carpet'],
+    names: ['floor', 'ground', 'rug', 'area rug', 'carpet', 'linoleum', 'hardwood'],
     global: true,
     desc: 'Hardwood with an old area rug under the sofa. Worn thin in the middle.',
   },
   ceiling: {
-    names: ['ceiling'],
+    names: ['ceiling', 'plaster', 'stain'],
     global: true,
     desc: "A water stain in one corner that's been there long enough nobody notices it anymore.",
   },
   walls: {
-    names: ['wall', 'walls', 'south wall', 'west wall', 'east wall'],
+    names: ['wall', 'walls', 'south wall', 'west wall', 'east wall', 'baseboard', 'scuff', 'scuff marks'],
     global: true,
     desc: 'Plain walls. A few scuff marks near the baseboard. A faded poster near the door.',
   },
   poster: {
-    names: ['poster', 'show poster', 'concert poster'],
+    names: ['poster', 'show poster', 'concert poster', 'khyber', 'silkscreen'],
     global: true,
     desc: 'A faded silkscreen gig poster by the door — the Khyber, a bill of bands whose names have gone to pale ghosts in the ink. You were there. You think you were there. The bottom corner is torn where the tape finally gave out.',
   },
