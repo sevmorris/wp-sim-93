@@ -483,6 +483,14 @@ export const SCENERY = {
     desc: 'Jade Palace Chinese Restaurant. A folded paper menu held up by a magnet shaped like a pineapple. The lo mein is circled in pen.',
     readDesc: 'Wonton soup, egg foo young, the combination platters numbered into the twenties. A 215 number and a delivery radius that takes in your block by about half a street. The lo mein is circled in pen — your own handwriting, though you don\'t remember doing it. Either a recommendation or a warning.',
   },
+  // The kitchen mentions "a few photos under magnets" and had nothing behind
+  // it. The only noun in the 2a pass with no existing prose to attach to, so
+  // it gets its own object rather than answering a question about photographs
+  // with a description of a refrigerator.
+  photos: {
+    names: ['photos', 'photo', 'snapshots', 'snapshot', 'pictures', 'picture'],
+    desc: 'Four or five snapshots under magnets, curling at the corners. A birthday nobody remembers whose, somebody\'s porch in summer, a car someone was proud of. The one near the bottom is from the creek — you took it, so you\'re not in it.',
+  },
   waterDispenser: {
     names: ['water dispenser', 'water cooler', 'water bottle', 'five gallon', '5 gallon', 'water jug', 'jug', 'dispenser', 'cooler', 'water'],
     desc() {

@@ -9,7 +9,7 @@ export const CONFIG = {
   HOME:      '/home/joe',
 };
 
-export const VERSION = '260727.02';
+export const VERSION = '260727.03';
 
 /* ── Teletype reveal ────────────────────────────────────────────────────────
    Game text reveals character by character, like a serial terminal rather than

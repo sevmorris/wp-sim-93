@@ -169,7 +169,7 @@ export const ContextManager = (() => {
     desk:    ['desk', 'chair', 'drawer', 'pc', 'computer', 'monitor', 'printer'],
     kitchen: ['fridge', 'refrigerator', 'stove', 'counter', 'cabinet',
               'sink', 'coffee maker', 'coffee pot', 'kitchen drawer', 'pan', 'skillet',
-              'jade palace', 'water dispenser', 'trash'],
+              'jade palace', 'water dispenser', 'trash', 'photos'],
     shelf:   ['record shelf', 'shelf', 'turntable'],
     ne:      ['boombox', 'cassette shelf', 'cassette rack', 'bedroom door', 'back bedroom'],
     north:   ['bookshelf', 'bookshelves', 'vhs shelf', 'phone',
