@@ -16,7 +16,7 @@
        just the entry file. This prevents a fresh engine.js from loading a
        stale world.js (which renders a blank page when exports don't match).
 
-       TO DEPLOY: bump the version in ONE place — find/replace 260727.03
+       TO DEPLOY: bump the version in ONE place — find/replace 260727.04
        below AND in the <script src> tag, plus VERSION in config.js. Keep
        all three identical. (A project-wide replace of the old version
        string does it in one shot.)
@@ -24,11 +24,11 @@
   <script type="importmap">
   {
     "imports": {
-      "./config.js":     "./config.js?v=260727.03",
-      "./filesystem.js": "./filesystem.js?v=260727.03",
-      "./state.js":      "./state.js?v=260727.03",
-      "./utils.js":      "./utils.js?v=260727.03",
-      "./world.js":      "./world.js?v=260727.03"
+      "./config.js":     "./config.js?v=260727.04",
+      "./filesystem.js": "./filesystem.js?v=260727.04",
+      "./state.js":      "./state.js?v=260727.04",
+      "./utils.js":      "./utils.js?v=260727.04",
+      "./world.js":      "./world.js?v=260727.04"
     }
   }
   </script>
@@ -52,6 +52,6 @@
   </div>
 </div>
 
-<script type="module" src="./engine.js?v=260727.03"></script>
+<script type="module" src="./engine.js?v=260727.04"></script>
 </body>
 </html>

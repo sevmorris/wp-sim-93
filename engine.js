@@ -1365,7 +1365,7 @@ function gameOpen(args) {
       if (!GameState.coffeeCanOpen) { gameOpen(['can']); return; }
       if (!GameState.cabinetOpen) { gameOpen(['cabinet']); return; }
     }
-    if ((GameState.playerArea === 'desk' || GameState.playerArea === 'chair') && !GameState.drawerOpen) { gameOpen(['drawer']); return; }
+    if (GameState.playerArea === 'desk' && !GameState.drawerOpen) { gameOpen(['drawer']); return; }
     GameState.pendingVerb = 'open'; addLine('Open what?'); return;
   }
   autoStand();
@@ -1814,7 +1814,7 @@ function gameSit(args) {
 
   // No explicit target — infer from area
   if (!where) {
-    if      (GameState.playerArea === 'desk' || GameState.playerArea === 'chair') where = 'chair';
+    if      (GameState.playerArea === 'desk') where = 'chair';
     else if (GameState.playerArea === 'sofa')                           where = 'sofa';
     else {
       addLine('Where? The sofa or the desk chair.');
@@ -1825,7 +1825,11 @@ function gameSit(args) {
 
   if (GameState.seated) { addLine("You're already sitting."); return; }
   GameState.seated = true;
-  GameState.playerArea = where;
+  // playerArea must always be an AREA_SCENERY key, or every area check in the
+  // game silently fails against it. The desk chair is furniture in the desk
+  // area, not an area of its own — sitting in it leaves you at the desk, and
+  // GameState.seated carries the rest.
+  GameState.playerArea = (where === 'chair') ? 'desk' : where;
 
   if (where === 'chair') {
     addLine('You drop into the desk chair and scoot up to the monitor.');
@@ -2513,7 +2517,7 @@ function gameMap() {
   addLine('                    S', 'dim');
   addLine('');
   let where = 'the middle of the room';
-  if      (GameState.playerArea === 'desk' || GameState.playerArea === 'chair') where = 'the desk';
+  if      (GameState.playerArea === 'desk') where = 'the desk';
   else if (GameState.playerArea === 'sofa')    where = 'the sofa';
   else if (GameState.playerArea === 'kitchen') where = 'the kitchen';
   else if (GameState.playerArea === 'shelf')   where = 'the record shelf';
