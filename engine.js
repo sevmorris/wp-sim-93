@@ -3220,7 +3220,7 @@ function handleGameCommand(raw) {
       && GameState.mugFilled && GameState.gInventory.includes('mug')) {
     GameState.momentSeen = true;
     addLine('');
-    addLine('Coffee in your hands, a record turning, rain at the window with all day to do it in. Nothing in the room needs anything from you. You notice that, and the noticing doesn\'t spoil it.', 'dim');
+    addLine('Coffee in your hands, a record turning, rain at the window with all day to do it in. Nothing in the room needs anything from you.', 'dim');
   }
 
   addLine('');

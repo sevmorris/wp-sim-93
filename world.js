@@ -605,7 +605,7 @@ export const SCENERY = {
   sink: {
     names: ['sink', 'dishes', 'dish', 'plate', 'plates', 'glass'],
     listen: 'The faucet lets go of a drop every twenty seconds or so. You stopped hearing it years ago, except when you listen.',
-    smell: 'Dish soap, wet sponge, and the faint sourness of two plates that have been in there since yesterday.',
+    smell: 'Dish soap, wet sponge, and the faint sourness of a few dishes that have been in there since yesterday.',
     desc: 'A few plates and a glass in the sink. Nothing alarming.',
   },
   trash: {
@@ -680,7 +680,6 @@ export const SCENERY = {
   },
   ceiling: {
     names: ['ceiling', 'plaster', 'stain'],
-    touch: 'Out of reach, and you\'re not getting a chair to find out.',
     global: true,
     desc: "A water stain in one corner that's been there long enough nobody notices it anymore.",
   },
