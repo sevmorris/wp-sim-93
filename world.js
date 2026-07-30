@@ -7,7 +7,7 @@ export const ROOM_DESC = () => {
     : GameState.catPos === 'bowl'     ? 'Cracker is in the kitchen, hunched over her food bowl with great seriousness.'
     : GameState.catPos === 'awake'    ? 'Cracker is awake on one end of the sofa, loafed up, watching the room through half-shut eyes.'
     :                                   'Cracker is curled up asleep on one end of the sofa.';
-  return `A small living room, lit flat and grey by the rain-light — that shadowless morning glow that leaves everything looking faintly underwater. A boxy television sits against the west wall, a VCR stacked underneath. An old brown sofa sits in the middle of the room, a patchwork quilt thrown over its back, facing the TV. Records and a turntable line the south wall. Along the north wall: bookshelves at the northwest end, then a VHS shelf, then a metal desk with a PC and printer — and in the northeast corner a battered boombox and a rack of cassettes near the door to the back bedroom. In the northwest corner, a small table holds a phone and an answering machine. Kitchen along the east wall. The ceiling is high, the plaster cracked in a slow map up near one corner. ${cracker} ${GameState.windowOpen ? 'The sound of rain comes through the open kitchen window.' : 'The window is closed; the rain is muffled outside.'}`;
+  return `A small living room, lit flat and grey by the rain-light — that shadowless morning glow that leaves everything looking faintly underwater. A boxy television sits against the west wall, a VCR stacked underneath. An old brown sofa sits in the middle of the room, a patchwork quilt thrown over its back, facing the TV. Records and a turntable line the south wall. Along the north wall: bookshelves at the northwest end, then a VHS shelf, then a metal desk with a PC and printer — and in the northeast corner a battered boombox and a rack of cassettes near the door to the back bedroom. In the northwest corner, a small table holds a phone and an answering machine. Kitchen along the east wall. The ceiling is high, the plaster cracked in a slow map up near one corner. ${cracker} ${GameState.windowOpen ? 'The sound of rain comes through the open kitchen window.' : 'The window is closed; the rain is muffled outside.'}${GameState.recordPlaying ? ` The turntable is going: ${GameState.recordPlaying}.` : ''}`;
 };
 
 export const ITEMS = [
@@ -324,6 +324,7 @@ export const READ_DESC = {
 export const SCENERY = {
   chair: {
     names: ['chair', 'desk chair', 'office chair'],
+    touch: 'Cold metal, a little tacky where the paint wore through. It folds if you look at it wrong.',
     desc: 'A metal folding chair pushed under the desk.',
   },
   desk: {
@@ -348,6 +349,7 @@ export const SCENERY = {
   },
   printer: {
     names: ['printer', 'dot matrix', 'dot-matrix', 'print', 'output tray', 'tray'],
+    smell: 'Warm ribbon ink and hot plastic. If you have ever printed anything, you know it immediately.',
     desc() {
       const flyer = ITEMS.find(i => i.id === 'tmz flyer');
       const flyerGone = !flyer || GameState.gInventory.includes('tmz flyer') || flyer.dropped;
@@ -465,6 +467,7 @@ export const SCENERY = {
   },
   fridge: {
     names: ['fridge', 'refrigerator', 'icebox', 'ice box', 'leftovers', 'foil'],
+    touch: 'The door is cool and faintly grabby with old magnet residue. The whole thing shivers when the compressor kicks in.',
     desc() {
       if (!GameState.fridgeOpen) return 'A humming refrigerator against the kitchen wall. A few takeout menus held up by magnets.';
       const items = ITEMS.filter(it => it.inFridge && !GameState.gInventory.includes(it.id));
@@ -487,12 +490,23 @@ export const SCENERY = {
   // it. The only noun in the 2a pass with no existing prose to attach to, so
   // it gets its own object rather than answering a question about photographs
   // with a description of a refrigerator.
+  // Named in the idle listen and feel pools but never an object until now.
+  radiator: {
+    names: ['radiator', 'rad', 'heater', 'heat', 'pipes', 'steam heat'],
+    global: true,
+    desc: 'A cast-iron radiator under the kitchen window, painted over so many times the fins have gone soft at the edges. It ticks when it feels like it.',
+    listen: 'It knocks twice, deep in the pipe, and settles. A minute from now it will do it again for no reason you will ever learn.',
+    touch:  'Hot near the top, barely warm at the bottom. The paint is thick and slightly tacky where the heat gets at it.',
+    smell:  'Hot metal and scorched dust — that particular smell of an old building coming up to temperature.',
+  },
   photos: {
     names: ['photos', 'photo', 'snapshots', 'snapshot', 'pictures', 'picture'],
+    touch: 'Glossy in the middle, soft at the curled corners. The magnets have left small dents where they hold.',
     desc: 'Four or five snapshots under magnets, curling at the corners. A birthday nobody remembers whose, somebody\'s porch in summer, a car someone was proud of. The one near the bottom is from the creek — you took it, so you\'re not in it.',
   },
   waterDispenser: {
     names: ['water dispenser', 'water cooler', 'water bottle', 'five gallon', '5 gallon', 'water jug', 'jug', 'dispenser', 'cooler', 'water'],
+    listen: 'It gurgles once, a fat bubble climbing the jug, and goes quiet. Nobody touched it.',
     desc() {
       return 'A five-gallon water jug on a plastic dispenser beside the fridge. Blue plastic, a little cloudy. The jug gurgles occasionally on its own.';
     },
@@ -586,14 +600,23 @@ export const SCENERY = {
   },
   sink: {
     names: ['sink', 'dishes', 'dish', 'plate', 'plates', 'glass'],
+    listen: 'The faucet lets go of a drop every twenty seconds or so. You stopped hearing it years ago, except when you listen.',
+    smell: 'Dish soap, wet sponge, and the faint sourness of two plates that have been in there since yesterday.',
     desc: 'A few plates and a glass in the sink. Nothing alarming.',
   },
   trash: {
     names: ['trash', 'trash can', 'garbage', 'garbage can', 'bin', 'wastebasket', 'waste basket', 'can'],
-    desc: 'A small trash can under the counter. The bag is about half full.',
+    smell: 'Coffee grounds, mostly, and something older underneath. Nothing you need to deal with today.',
+    desc() {
+      const inIt = ITEMS.filter(i => i.inTrash);
+      if (!inIt.length) return 'A small trash can under the counter. The bag is about half full.';
+      const what = inIt.map(i => i.label).join(', ');
+      return `A small trash can under the counter. The bag is about half full, and ${what} ${inIt.length > 1 ? 'sit' : 'sits'} right on top, not even buried.`;
+    },
   },
   book: {
     names: ['bookshelf', 'book shelf', 'books', 'book', 'paperback', 'paperbacks', 'fiction', 'textbooks', 'textbook', 'spine', 'north shelf'],
+    smell: 'Old paper and glue, and under it the dust that lives in every secondhand paperback.',
     desc() {
       const available = ITEMS.filter(it => it.shelvedBook && !GameState.gInventory.includes(it.id) && !it.dropped);
       const titles = available.map(it => it.label).join(', ');
@@ -645,26 +668,31 @@ export const SCENERY = {
   },
   floor: {
     names: ['floor', 'ground', 'rug', 'area rug', 'carpet', 'linoleum', 'hardwood'],
+    touch: 'Cold through your socks. The boards give a little near the sofa, and one of them has always creaked.',
     global: true,
     desc: 'Hardwood with an old area rug under the sofa. Worn thin in the middle.',
   },
   ceiling: {
     names: ['ceiling', 'plaster', 'stain'],
+    touch: 'Out of reach, and you\'re not getting a chair to find out.',
     global: true,
     desc: "A water stain in one corner that's been there long enough nobody notices it anymore.",
   },
   walls: {
     names: ['wall', 'walls', 'south wall', 'west wall', 'east wall', 'baseboard', 'scuff', 'scuff marks'],
+    touch: 'Plaster over lath, cool and slightly uneven. You can feel where somebody patched it and gave up on matching the texture.',
     global: true,
     desc: 'Plain walls. A few scuff marks near the baseboard. A faded poster near the door.',
   },
   poster: {
     names: ['poster', 'show poster', 'concert poster', 'khyber', 'silkscreen'],
+    touch: 'Paper gone soft as cloth. The tape at the top corner has dried out and lets go a little more every year.',
     global: true,
     desc: 'A faded silkscreen gig poster by the door — the Khyber, a bill of bands whose names have gone to pale ghosts in the ink. You were there. You think you were there. The bottom corner is torn where the tape finally gave out.',
   },
   door: {
     names: ['door', 'front door'],
+    listen: 'The building, mostly. A door two floors up. Pipes carrying somebody else\'s heat. Out past it, the rain.',
     global: true,
     desc: "The front door. Closed.",
   },
@@ -690,6 +718,7 @@ export const SCENERY = {
   },
   bedroomDoor: {
     names: ['back bedroom', 'bedroom', 'bedroom door', 'back bedroom door', 'back door'],
+    listen: 'Nothing. The back room is dark and a few degrees cooler and has nothing in it that makes noise.',
     desc: 'A door in the northeast corner leading to the back bedroom.',
   },
 };

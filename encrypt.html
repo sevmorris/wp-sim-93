@@ -220,7 +220,7 @@
         <button class="secondary" style="padding: 0.25rem 0.75rem; font-size: 0.7rem;" onclick="copyResult()">Copy to Clipboard</button>
       </div>
       <div id="result-text"></div>
-      
+
       <div class="buttons" style="margin-top: 1.5rem;">
         <button id="btn-patch" class="secondary" onclick="patchFile()">Apply to Project File...</button>
       </div>
@@ -230,7 +230,7 @@
 
     <div class="instructions">
       <p>This tool uses PBKDF2 for key derivation (100,000 iterations, SHA-256) and AES-256-GCM for encryption.</p>
-      <p>The <strong>Apply to Project File</strong> feature can update <code>config.js</code> or <code>index.html</code> by searching for <code>FLOPPY_CIPHER: '...'</code>.</p>
+      <p>The <strong>Apply to Project File</strong> feature updates <code>config.js</code> by searching for <code>FLOPPY_CIPHER: '...'</code>.</p>
     </div>
   </div>
 
@@ -242,11 +242,11 @@
       mode = m;
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       event.target.classList.add('active');
-      
+
       document.getElementById('input-label').textContent = mode === 'encrypt' ? 'Plaintext Letter' : 'Ciphertext (Base64)';
       document.getElementById('btn-action').textContent = mode === 'encrypt' ? 'Encrypt Text' : 'Decrypt Text';
       document.getElementById('input-text').placeholder = mode === 'encrypt' ? 'Type or paste text here...' : 'Paste base64 ciphertext here...';
-      
+
       // Hide output when switching modes to avoid confusion
       document.getElementById('output-area').style.display = 'none';
       setStatus('');
@@ -269,19 +269,19 @@
     async function process() {
       const pass = document.getElementById('pass').value;
       const text = document.getElementById('input-text').value;
-      
+
       if (!pass) return setStatus('Password required.', 'error');
       if (!text) return setStatus('Input text required.', 'error');
 
       setStatus('Processing...');
-      
+
       try {
         if (mode === 'encrypt') {
           lastResult = await encrypt(text, pass);
         } else {
           lastResult = await decrypt(text, pass);
         }
-        
+
         document.getElementById('result-text').textContent = lastResult;
         document.getElementById('output-area').style.display = 'block';
         setStatus(mode === 'encrypt' ? 'Encryption successful.' : 'Decryption successful.', 'ok');

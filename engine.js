@@ -2152,8 +2152,18 @@ function gameListen(args) {
     return;
   }
   if (/rain|window|outside/.test(target)) { addLine(GameState.windowOpen ? 'Rain through the window. A steady sound.' : 'Rain against the glass. Muffled, but it\'s still going.'); return; }
-  if (/cat|cracker/.test(target)) { addLine('Slow, even breathing. She\'s deeply asleep.'); return; }
+  if (/cat|cracker/.test(target)) {
+    addLine(GameState.catPos === 'bowl'       ? 'Small wet crunching from the kitchen. She is entirely occupied.'
+          : GameState.catPos === 'windowsill' ? 'Nothing much. Now and then her tail thumps the sill once, at the rain.'
+          : GameState.catPos === 'awake'      ? 'Nothing — but the purr starts up the moment she notices you listening.'
+          :                                     "Slow, even breathing. She's deeply asleep.");
+    return;
+  }
   if (/music|sound|noise|ambient|room/.test(target)) { gameListen([]); return; }
+  {
+    const sc = findScenery(target);
+    if (sc && sc.listen) { addLine(typeof sc.listen === 'function' ? sc.listen() : sc.listen); return; }
+  }
   addLine("You don't hear much.");
 }
 
@@ -2228,6 +2238,10 @@ function gameSmell(args) {
     addLine(!GameState.mugFilled ? 'Nothing. The mug is empty.' : GameState.mugHasHalf ? 'Coffee and cream. Warm.' : 'Coffee. Slightly stale, but it works.');
     return;
   }
+  {
+    const sc = findScenery(target);
+    if (sc && sc.smell) { addLine(typeof sc.smell === 'function' ? sc.smell() : sc.smell); return; }
+  }
   addLine('Nothing remarkable.');
 }
 
@@ -2267,6 +2281,7 @@ function gameTouch(args) {
   if (/beer|bottle/.test(word))         { addLine(GameState.gInventory.some(id => ITEMS.find(i=>i.id===id)?.drinkable) ? 'Ice cold.' : "You're not holding a beer."); return; }
   if (/mug|cup/.test(word))             { addLine(GameState.mugFilled ? 'Still a little warm.' : 'Cold ceramic.'); return; }
   const sc = findScenery(word);
+  if (sc && sc.touch) { addLine(typeof sc.touch === 'function' ? sc.touch() : sc.touch); return; }
   if (sc) { addLine('It feels like what it is.'); return; }
   const it = gameItem(word);
   if (it && !it.hidden) { addLine('Feels ordinary.'); return; }
