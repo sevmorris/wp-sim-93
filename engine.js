@@ -4,6 +4,22 @@ import { SystemState, GameState, ContextManager } from './state.js';
 import { addLine, clearOutput, cap, normPath, resolvePath, children, decryptLetter, outputEl, promptEl, inputEl, panelEl } from './utils.js';
 import { ROOM_DESC, ITEMS, WATCH_DESC, LISTEN_DESC, READ_DESC, SCENERY } from './world.js';
 
+// ── Pin check ───────────────────────────────────────────────────────────────
+// Fetching the pin fixes staleness but not content-addressing: ?v= still serves
+// whatever bytes are at that path today, so a deploy that ships without bumping
+// all three places leaves modules loaded under a pin they weren't built as.
+// config.js travels with the code, so comparing its VERSION to the pin the page
+// booted under is a direct test of that — and deploying now touches three files
+// rather than two, which is exactly when someone misses one.
+if (typeof window !== 'undefined' && window.__PIN) {
+  window.__PIN.configVersion = VERSION;
+  window.__PIN.mismatch      = (VERSION !== window.__PIN.version);
+  if (window.__PIN.mismatch)
+    console.warn('[FL2601] pin mismatch: loaded under ' + window.__PIN.version +
+                 ' (' + window.__PIN.source + ') but config.js says ' + VERSION +
+                 ' — a deploy probably bumped some files and not others.');
+}
+
 const AREA_NAMES = {
   desk:    'desk',
   kitchen: 'kitchen',

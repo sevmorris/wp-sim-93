@@ -10,27 +10,82 @@
 
   <!-- ════════════════════════════════════════════════════════════════════
        CACHE-BUSTING / VERSION PIN
-       The version query below is appended to EVERY local module via this
-       import map, so a version bump invalidates the whole ES module graph
-       at once (engine + world + state + utils + config + filesystem), not
-       just the entry file. This prevents a fresh engine.js from loading a
-       stale world.js (which renders a blank page when exports don't match).
+       Every local module is pinned to one version, so a bump invalidates the
+       whole ES module graph at once (engine + world + state + utils + config
+       + filesystem) rather than just the entry file. A fresh engine.js paired
+       with a stale world.js renders a blank page when the exports disagree.
 
-       TO DEPLOY: bump the version in ONE place — find/replace 260727.06
-       below AND in the <script src> tag, plus VERSION in config.js. Keep
-       all three identical. (A project-wide replace of the old version
-       string does it in one shot.)
+       The pin is fetched at boot from version.json rather than being written
+       here, because a pin that lives in this file cannot bust this file: a
+       browser holding a cached index.html keeps requesting the old ?v= URLs
+       forever, and — since ?v= is not content-addressed — those URLs now
+       serve different bytes than they did, which is how a mixed graph
+       happens. version.json is fetched with cache:'no-store', so it is the
+       one request that always reaches the origin.
+
+       FALLBACK below is the baked-in pin, used when version.json cannot be
+       read — offline, origin down, or slow. It is not a nicety: without it a
+       network failure means no game at all rather than an older game.
+
+       TO DEPLOY: bump version.json, FALLBACK below, and VERSION in config.js.
+       Keep all three identical.
        ════════════════════════════════════════════════════════════════════ -->
-  <script type="importmap">
-  {
-    "imports": {
-      "./config.js":     "./config.js?v=260727.06",
-      "./filesystem.js": "./filesystem.js?v=260727.06",
-      "./state.js":      "./state.js?v=260727.06",
-      "./utils.js":      "./utils.js?v=260727.06",
-      "./world.js":      "./world.js?v=260727.06"
+  <script>
+  (function () {
+    var FALLBACK = '260727.06';
+    var MODULES  = ['config', 'filesystem', 'state', 'utils', 'world'];
+    var booted   = false;
+
+    function boot(version, source) {
+      if (booted) return;
+      booted = true;
+      window.__PIN = { version: version, source: source };
+
+      var map = { imports: {} };
+      for (var i = 0; i < MODULES.length; i++)
+        map.imports['./' + MODULES[i] + '.js'] = './' + MODULES[i] + '.js?v=' + version;
+
+      // The import map has to be in place before the first module load is
+      // triggered, which is why the entry script is appended after it here
+      // rather than sitting statically in the markup.
+      var im = document.createElement('script');
+      im.type = 'importmap';
+      im.textContent = JSON.stringify(map);
+      document.head.appendChild(im);
+
+      var entry = document.createElement('script');
+      entry.type = 'module';
+      entry.src  = './engine.js?v=' + version;
+      document.head.appendChild(entry);
     }
-  }
+
+    // Never let the network hold the game hostage. If version.json is slow,
+    // boot on the baked-in pin and let the late reply lose the race.
+    var timer = setTimeout(function () { boot(FALLBACK, 'fallback:timeout'); }, 1500);
+
+    try {
+      fetch('./version.json', { cache: 'no-store' })
+        .then(function (r) {
+          if (!r.ok) return { bad: 'bad-response' };
+          // A captive portal or ISP interstitial answers 200 with HTML. The
+          // document is cached and this fetch isn't, so it is exactly the
+          // request such a network gets to intercept — parse failure has to
+          // land in the fallback, not throw the boot away.
+          return r.json().then(function (j) { return j; },
+                               function ()  { return { bad: 'bad-json' }; });
+        })
+        .then(function (j) {
+          clearTimeout(timer);
+          if      (j && j.bad)     boot(FALLBACK, 'fallback:' + j.bad);
+          else if (j && j.version) boot(j.version, 'version.json');
+          else                     boot(FALLBACK, 'fallback:bad-response');
+        })
+        .catch(function () { clearTimeout(timer); boot(FALLBACK, 'fallback:fetch-failed'); });
+    } catch (e) {
+      clearTimeout(timer);
+      boot(FALLBACK, 'fallback:no-fetch');
+    }
+  })();
   </script>
 </head>
 <body>
@@ -52,6 +107,7 @@
   </div>
 </div>
 
-<script type="module" src="./engine.js?v=260727.06"></script>
+<!-- The entry module is injected by the pin bootstrap in <head>, after the
+     import map it depends on. -->
 </body>
 </html>
