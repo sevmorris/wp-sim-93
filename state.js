@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { ITEMS } from './world.js';
+import { ITEMS, SCENERY } from './world.js';
 
 export const SystemState = {
   state: 'shell',
@@ -168,15 +168,27 @@ export const ContextManager = (() => {
   const AREA_SCENERY = {
     desk:    ['desk', 'chair', 'drawer', 'pc', 'computer', 'monitor', 'printer'],
     kitchen: ['fridge', 'refrigerator', 'stove', 'counter', 'cabinet',
-              'sink', 'coffee maker', 'coffee pot', 'kitchen drawer', 'pan', 'skillet'],
+              'sink', 'coffee maker', 'coffee pot', 'kitchen drawer', 'pan', 'skillet',
+              'jade palace', 'water dispenser', 'trash'],
     shelf:   ['record shelf', 'shelf', 'turntable'],
-    ne:      ['boombox', 'cassette shelf', 'cassette rack', 'bedroom door'],
+    ne:      ['boombox', 'cassette shelf', 'cassette rack', 'bedroom door', 'back bedroom'],
     north:   ['bookshelf', 'bookshelves', 'vhs shelf', 'phone',
               'answering machine', 'small table'],
     sofa:    ['sofa', 'couch', 'tv', 'television', 'vcr', 'vhs player', 'cat', 'cracker'],
   };
 
+  // Ambient scenery — the ceiling, the walls, the light, the rain at the window
+  // — is available from anywhere in a one-room apartment, and being told to walk
+  // somewhere to look at the ceiling is absurd. Flagged in world.js rather than
+  // left to an absent table entry, so that "no area" reads as a decision rather
+  // than an oversight: every other scenery object is expected to appear above.
+  function isGlobalScenery(id) {
+    const sc = Object.values(SCENERY).find(s => s.names.includes(id));
+    return !!(sc && sc.global);
+  }
+
   function areaOf(id) {
+    if (isGlobalScenery(id)) return null;
     for (const [area, ids] of Object.entries(AREA_ITEMS))
       if (ids.includes(id)) return area;
     for (const [area, names] of Object.entries(AREA_SCENERY))

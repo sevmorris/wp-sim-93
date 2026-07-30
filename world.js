@@ -369,6 +369,7 @@ export const SCENERY = {
   },
   lamp: {
     names: ['lamp', 'old lamp'],
+    global: true,
     desc() { return `An old lamp from Second Mile Thrift Store. It is ${GameState.lampOn ? 'on' : 'off'}.`; },
     toggle: true,
     turnOn()  { if (GameState.lampOn)  { addLine('The lamp is already on.');  return; } GameState.lampOn = true;  addLine('You click the lamp on. The room fills with warm light.'); },
@@ -559,6 +560,7 @@ export const SCENERY = {
   },
   window: {
     names: ['window', 'windows', 'outside'],
+    global: true,
     desc() {
       const sill = GameState.catPos === 'windowsill' ? ' Cracker is up on the sill, watching the rain run down.' : '';
       return GameState.windowOpen
@@ -568,6 +570,7 @@ export const SCENERY = {
   },
   quilt: {
     names: ['quilt', 'blanket', 'throw', 'patchwork'],
+    global: true,
     desc: 'A worn patchwork quilt draped over the back of the sofa. Soft from years of washing.',
   },
   sink: {
@@ -631,22 +634,27 @@ export const SCENERY = {
   },
   floor: {
     names: ['floor', 'ground', 'rug', 'area rug', 'carpet'],
+    global: true,
     desc: 'Hardwood with an old area rug under the sofa. Worn thin in the middle.',
   },
   ceiling: {
     names: ['ceiling'],
+    global: true,
     desc: "A water stain in one corner that's been there long enough nobody notices it anymore.",
   },
   walls: {
     names: ['wall', 'walls', 'south wall', 'west wall', 'east wall'],
+    global: true,
     desc: 'Plain walls. A few scuff marks near the baseboard. A faded poster near the door.',
   },
   poster: {
     names: ['poster', 'show poster', 'concert poster'],
+    global: true,
     desc: 'A faded silkscreen gig poster by the door — the Khyber, a bill of bands whose names have gone to pale ghosts in the ink. You were there. You think you were there. The bottom corner is torn where the tape finally gave out.',
   },
   door: {
     names: ['door', 'front door'],
+    global: true,
     desc: "The front door. Closed.",
   },
   phoneTable: {
